@@ -62,11 +62,11 @@ export default function OcrPanel() {
     <div className="flex h-full flex-col gap-4 overflow-auto p-8">
       <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-4">
         <div>
-          <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-100">
-            <IconScan className="h-5 w-5 text-indigo-400" />
+          <h2 className="flex items-center gap-2 text-lg font-semibold">
+            <IconScan className="h-5 w-5 text-indigo-500 dark:text-indigo-400" />
             OCR — extract text
           </h2>
-          <p className="mt-1 text-sm text-slate-400">
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
             Recognition runs locally in a tesseract.js Web Worker — engine, WASM core and the
             English language model are all served with the app. Your document is never uploaded
             anywhere.
@@ -85,11 +85,11 @@ export default function OcrPanel() {
           <button
             onClick={() => void run(true)}
             disabled={running || state.pages.length === 0}
-            className="rounded-lg border border-slate-600 px-4 py-2 text-sm text-slate-200 transition hover:border-slate-400 disabled:opacity-50"
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm transition hover:border-slate-500 disabled:opacity-50 dark:border-slate-600 dark:text-slate-200 dark:hover:border-slate-400"
           >
             All {state.pages.length} pages
           </button>
-          {status && <span className="text-sm text-indigo-300">{status}</span>}
+          {status && <span className="text-sm text-indigo-500 dark:text-indigo-300">{status}</span>}
         </div>
 
         {results.length > 0 && (
@@ -97,7 +97,7 @@ export default function OcrPanel() {
             <div className="flex items-center gap-3">
               <button
                 onClick={() => void copy()}
-                className="rounded-lg border border-slate-600 px-3 py-1.5 text-xs text-slate-200 hover:border-slate-400"
+                className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs hover:border-slate-500 dark:border-slate-600 dark:text-slate-200 dark:hover:border-slate-400"
               >
                 {copied ? 'Copied!' : 'Copy all'}
               </button>
@@ -105,19 +105,19 @@ export default function OcrPanel() {
                 onClick={() =>
                   downloadBytes(new TextEncoder().encode(fullText), 'extracted-text.txt', 'text/plain')
                 }
-                className="flex items-center gap-1.5 rounded-lg border border-slate-600 px-3 py-1.5 text-xs text-slate-200 hover:border-slate-400"
+                className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs hover:border-slate-500 dark:border-slate-600 dark:text-slate-200 dark:hover:border-slate-400"
               >
                 <IconDownload className="h-3.5 w-3.5" />
                 Download .txt
               </button>
-              <span className="text-xs text-slate-500">
+              <span className="text-xs text-slate-400 dark:text-slate-500">
                 {fullText.length.toLocaleString()} characters extracted
               </span>
             </div>
             <textarea
               readOnly
               value={fullText}
-              className="min-h-64 flex-1 resize-none rounded-xl border border-slate-800 bg-slate-900/60 p-4 font-mono text-sm leading-relaxed text-slate-200 outline-none"
+              className="min-h-64 flex-1 resize-none rounded-xl border border-slate-200 bg-white p-4 font-mono text-sm leading-relaxed outline-none dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-200"
             />
           </>
         )}

@@ -30,13 +30,13 @@ export default function PageOrganizer() {
   return (
     <div className="h-full overflow-auto p-6">
       <div className="mb-4 flex items-center justify-between">
-        <p className="text-sm text-slate-400">
+        <p className="text-sm text-slate-500 dark:text-slate-400">
           Drag pages to reorder{multipleSources ? ' — pages from all files can be interleaved' : ''}.
           Deletions and ordering apply on export.
         </p>
         <button
           onClick={() => inputRef.current?.click()}
-          className="flex items-center gap-1.5 rounded-lg border border-dashed border-slate-600 px-3 py-1.5 text-sm text-slate-300 transition hover:border-indigo-400 hover:text-indigo-300"
+          className="flex items-center gap-1.5 rounded-lg border border-dashed border-slate-400 px-3 py-1.5 text-sm text-slate-600 transition hover:border-indigo-400 hover:text-indigo-500 dark:border-slate-600 dark:text-slate-300 dark:hover:text-indigo-300"
         >
           <IconPlus className="h-4 w-4" />
           Add / merge PDFs
@@ -86,14 +86,14 @@ export default function PageOrganizer() {
               }}
               className={`group relative cursor-grab rounded-xl border p-2 transition active:cursor-grabbing
                 ${isDragging ? 'opacity-40' : ''}
-                ${isOver ? 'border-indigo-400 bg-indigo-500/10 ring-2 ring-indigo-400/60' : 'border-slate-800 bg-slate-900/60 hover:border-slate-600'}`}
+                ${isOver ? 'border-indigo-400 bg-indigo-500/10 ring-2 ring-indigo-400/60' : 'border-slate-200 bg-white shadow-sm hover:border-indigo-300 dark:border-slate-800 dark:bg-slate-900/60 dark:hover:border-slate-600'}`}
               title="Drag to reorder — double-click to open in viewer"
             >
               <PageThumb entry={entry} />
               <div className="mt-2 flex items-center justify-between px-1">
-                <span className="text-xs font-medium text-slate-400">{index + 1}</span>
+                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">{index + 1}</span>
                 {multipleSources && (
-                  <span className="max-w-24 truncate text-[10px] text-slate-500">
+                  <span className="max-w-24 truncate text-[10px] text-slate-400 dark:text-slate-500">
                     {state.sources[entry.sourceId]?.name}
                   </span>
                 )}
@@ -105,7 +105,7 @@ export default function PageOrganizer() {
                     e.stopPropagation();
                     dispatch({ type: 'ROTATE_PAGE', pageId: entry.id });
                   }}
-                  className="rounded-md bg-slate-900/90 p-1.5 text-slate-200 shadow hover:bg-indigo-500"
+                  className="rounded-md bg-slate-700/90 p-1.5 text-white shadow hover:bg-indigo-500 dark:bg-slate-900/90"
                   title="Rotate 90°"
                 >
                   <IconRotate className="h-3.5 w-3.5" />
@@ -115,7 +115,7 @@ export default function PageOrganizer() {
                     e.stopPropagation();
                     dispatch({ type: 'REMOVE_PAGE', pageId: entry.id });
                   }}
-                  className="rounded-md bg-slate-900/90 p-1.5 text-slate-200 shadow hover:bg-red-500"
+                  className="rounded-md bg-slate-700/90 p-1.5 text-white shadow hover:bg-red-500 dark:bg-slate-900/90"
                   title="Delete page"
                 >
                   <IconTrash className="h-3.5 w-3.5" />

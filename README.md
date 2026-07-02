@@ -11,12 +11,16 @@ and every byte of every PDF you open stays on your device.
 | **Viewer** | Drag & drop PDFs, rendered with Mozilla's `pdf.js` (its rendering worker runs in-browser). Zoom presets and page-by-page navigation. |
 | **Page organizer** | Grid of live thumbnails. Drag to reorder, delete, rotate. Drop in more PDFs to merge — pages from all files can be interleaved. `pdf-lib` assembles the result on export. |
 | **Edit mode** | `pdf.js` text items are projected into screen space and overlaid with HTML textareas. Click any text block to rewrite it, or place brand-new text boxes. On export the edits are mapped back to PDF user-space coordinates and burned in with `pdf-lib` (original text is whited out, replacement drawn at the same baseline). |
+| **Converter** | PDF → **Word** (`docx`, text with page breaks and heading sizes), **Excel** (SheetJS, one worksheet per page, text fragments as cells) and **PowerPoint** (`pptxgenjs`, each page as a full-bleed slide image) — all generated in the browser. |
+| **Form wizard** | Build fillable **AcroForm** PDFs from scratch: text, paragraph, number, date, time, email, phone, checkbox, dropdown and radio fields (with required flags, defaults and options), on A4 / Letter / Legal / A3 / A5 / Tabloid pages in portrait or landscape. Save downloads the PDF locally; data entered by recipients is stored inside the PDF itself. |
 | **Compressor** | A dedicated **Web Worker** parses the PDF with `pdf-lib`, finds embedded JPEG (`DCTDecode`) images, decodes them with `createImageBitmap`, downsamples them on an **OffscreenCanvas**, re-encodes at your chosen JPEG quality (default 0.6) and swaps the streams back in. The UI thread never blocks. |
+| **Print** | One-click printing through the browser dialog; a live date & clock sits in the header and every printed page is stamped with the print date & time. |
+| **Themes** | Light and dark UI with a one-click toggle (defaults to your OS preference). |
 | **OCR** | Pages are rasterized to a canvas and recognized by `tesseract.js`, which runs its WASM engine inside its own **Web Worker**. The worker script, WASM core and English language model are self-hosted static assets — no CDN involved. Extracted text can be copied or downloaded as `.txt`. |
 
 ## Privacy model
 
-- Files are held **in memory only** — no localStorage, no IndexedDB, no cookies, no network calls with your data.
+- Files are held **in memory only** — no localStorage, no IndexedDB, no cookies, no network calls with your data. (The only thing stored locally is your light/dark theme preference.)
 - The only network access at runtime is fetching the app's own static assets (which include the OCR engine and language model). Your documents are never part of any request.
 
 ## Stack

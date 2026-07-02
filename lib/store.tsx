@@ -184,6 +184,8 @@ interface StoreValue {
   addFiles: (files: FileList | File[]) => Promise<void>;
   /** Replace the whole workspace with a single new PDF (e.g. compressed output). */
   replaceWorkspace: (name: string, bytes: Uint8Array) => Promise<void>;
+  /** Add an in-memory generated PDF (e.g. a form built by the wizard). */
+  addGeneratedPdf: (name: string, bytes: Uint8Array) => Promise<void>;
   clearAll: () => void;
 }
 
@@ -220,14 +222,20 @@ export function PdfProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'RESET_WORKSPACE', source: { id, name, bytes, numPages } });
   }, []);
 
+  const addGeneratedPdf = useCallback(async (name: string, bytes: Uint8Array) => {
+    const id = uid();
+    const numPages = await loadIntoCache(id, bytes);
+    dispatch({ type: 'ADD_SOURCE', source: { id, name, bytes, numPages } });
+  }, []);
+
   const clearAll = useCallback(() => {
     clearCache();
     dispatch({ type: 'CLEAR_ALL' });
   }, []);
 
   const value = useMemo(
-    () => ({ state, dispatch, addFiles, replaceWorkspace, clearAll }),
-    [state, addFiles, replaceWorkspace, clearAll],
+    () => ({ state, dispatch, addFiles, replaceWorkspace, addGeneratedPdf, clearAll }),
+    [state, addFiles, replaceWorkspace, addGeneratedPdf, clearAll],
   );
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

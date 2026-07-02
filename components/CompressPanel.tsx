@@ -89,21 +89,21 @@ export default function CompressPanel() {
     <div className="h-full overflow-auto p-8">
       <div className="mx-auto max-w-xl space-y-6">
         <div>
-          <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-100">
-            <IconShrink className="h-5 w-5 text-indigo-400" />
+          <h2 className="flex items-center gap-2 text-lg font-semibold">
+            <IconShrink className="h-5 w-5 text-indigo-500 dark:text-indigo-400" />
             Compress PDF
           </h2>
-          <p className="mt-1 text-sm text-slate-400">
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
             Embedded images are downsampled and re-encoded as JPEG in a background Web Worker —
             entirely on this device. Text, fonts and vector graphics are untouched.
           </p>
         </div>
 
-        <div className="space-y-5 rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+        <div className="space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900/60">
           <label className="block">
-            <span className="mb-1.5 flex justify-between text-sm text-slate-300">
+            <span className="mb-1.5 flex justify-between text-sm text-slate-600 dark:text-slate-300">
               <span>JPEG quality</span>
-              <span className="font-mono text-indigo-300">{quality.toFixed(2)}</span>
+              <span className="font-mono text-indigo-500 dark:text-indigo-300">{quality.toFixed(2)}</span>
             </span>
             <input
               type="range"
@@ -114,17 +114,17 @@ export default function CompressPanel() {
               onChange={(e) => setQuality(Number(e.target.value))}
               className="w-full accent-indigo-500"
             />
-            <span className="mt-1 block text-xs text-slate-500">
+            <span className="mt-1 block text-xs text-slate-400 dark:text-slate-500">
               0.6 is a good balance of size and sharpness.
             </span>
           </label>
 
           <label className="block">
-            <span className="mb-1.5 block text-sm text-slate-300">Max image dimension</span>
+            <span className="mb-1.5 block text-sm text-slate-600 dark:text-slate-300">Max image dimension</span>
             <select
               value={maxDimension}
               onChange={(e) => setMaxDimension(Number(e.target.value))}
-              className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-200"
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
             >
               <option value={1000}>1000 px — smallest files</option>
               <option value={1600}>1600 px — recommended</option>
@@ -147,7 +147,7 @@ export default function CompressPanel() {
           </button>
 
           {running && progress && (
-            <div className="h-1.5 overflow-hidden rounded-full bg-slate-800">
+            <div className="h-1.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
               <div
                 className="h-full rounded-full bg-indigo-500 transition-all"
                 style={{ width: `${(progress.current / Math.max(progress.total, 1)) * 100}%` }}
@@ -157,20 +157,20 @@ export default function CompressPanel() {
         </div>
 
         {result && (
-          <div className="space-y-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-6">
+          <div className="space-y-4 rounded-2xl border border-emerald-500/40 bg-emerald-500/10 p-6 dark:border-emerald-500/30 dark:bg-emerald-500/5">
             <div className="flex items-baseline justify-between">
               <div>
-                <p className="text-2xl font-bold text-emerald-300">−{savedPct}%</p>
-                <p className="text-sm text-slate-400">
+                <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-300">−{savedPct}%</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400">
                   {formatBytes(result.originalSize)} → {formatBytes(result.bytes.byteLength)}
                 </p>
               </div>
-              <p className="text-right text-xs text-slate-500">
+              <p className="text-right text-xs text-slate-400 dark:text-slate-500">
                 {result.imagesRecompressed} of {result.imagesFound} images recompressed
               </p>
             </div>
             {result.imagesFound === 0 && (
-              <p className="text-xs text-amber-300/80">
+              <p className="text-xs text-amber-600 dark:text-amber-300/80">
                 No recompressible JPEG images were found in this document — the size change comes
                 from restructuring the file only.
               </p>
@@ -185,7 +185,7 @@ export default function CompressPanel() {
               </button>
               <button
                 onClick={() => void replaceWorkspace('compressed.pdf', result.bytes)}
-                className="flex-1 rounded-lg border border-slate-600 px-4 py-2 text-sm text-slate-200 hover:border-slate-400"
+                className="flex-1 rounded-lg border border-slate-300 px-4 py-2 text-sm hover:border-slate-500 dark:border-slate-600 dark:text-slate-200 dark:hover:border-slate-400"
                 title="Continue editing the compressed version"
               >
                 Use as working file

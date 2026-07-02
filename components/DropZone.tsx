@@ -37,26 +37,30 @@ export default function DropZone({ fullScreen = false }: { fullScreen?: boolean 
       }}
     >
       <div
-        className={`flex w-full max-w-xl cursor-pointer flex-col items-center gap-4 rounded-2xl border-2 border-dashed p-12 text-center transition
-          ${dragging ? 'border-indigo-400 bg-indigo-500/10' : 'border-slate-700 bg-slate-900/40 hover:border-slate-500'}`}
+        className={`flex w-full max-w-xl cursor-pointer flex-col items-center gap-4 rounded-2xl border-2 border-dashed p-12 text-center shadow-sm transition
+          ${
+            dragging
+              ? 'border-indigo-400 bg-indigo-500/10'
+              : 'border-slate-300 bg-white hover:border-indigo-300 dark:border-slate-700 dark:bg-slate-900/40 dark:hover:border-slate-500'
+          }`}
         onClick={() => inputRef.current?.click()}
       >
         {loading ? (
-          <IconSpinner className="h-10 w-10 text-indigo-400" />
+          <IconSpinner className="h-10 w-10 text-indigo-500 dark:text-indigo-400" />
         ) : (
-          <IconDocument className="h-12 w-12 text-indigo-400" />
+          <IconDocument className="h-12 w-12 text-indigo-500 dark:text-indigo-400" />
         )}
         <div>
-          <p className="text-lg font-semibold text-slate-100">
+          <p className="text-lg font-semibold">
             {loading ? 'Opening PDF…' : 'Drop PDF files here'}
           </p>
-          <p className="mt-1 text-sm text-slate-400">
-            or <span className="font-medium text-indigo-400">click to browse</span> — drop several
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            or <span className="font-medium text-indigo-500 dark:text-indigo-400">click to browse</span> — drop several
             files to merge them
           </p>
         </div>
-        <p className="flex items-center gap-1.5 text-xs text-slate-500">
-          <IconShield className="h-3.5 w-3.5 text-emerald-400" />
+        <p className="flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500">
+          <IconShield className="h-3.5 w-3.5 text-emerald-500 dark:text-emerald-400" />
           Processed entirely in your browser. Nothing is uploaded, ever.
         </p>
         <input

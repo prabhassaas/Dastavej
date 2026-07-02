@@ -146,7 +146,7 @@ export default function EditLayer({ pageEntry, page, viewport, tool }: Props) {
                   }
                 />
                 <button
-                  className="absolute -top-2.5 -right-2.5 hidden rounded-full bg-slate-700 p-0.5 text-white shadow group-hover:block hover:bg-red-500"
+                  className="absolute -top-2.5 -right-2.5 hidden rounded-full bg-slate-600 p-0.5 text-white shadow group-hover:block hover:bg-red-500 dark:bg-slate-700"
                   title="Revert this edit"
                   onClick={() =>
                     dispatch({
@@ -237,9 +237,9 @@ function AddedTextBox({
           dispatch({ type: 'UPDATE_ADDED', pageId, id: box.id, patch: { text: e.target.value } })
         }
       />
-      <div className="absolute -top-3 left-0 hidden -translate-y-full items-center gap-1 rounded-md bg-slate-800 p-1 shadow-lg group-focus-within:flex group-hover:flex">
+      <div className="absolute -top-3 left-0 hidden -translate-y-full items-center gap-1 rounded-md border border-slate-200 bg-white p-1 shadow-lg group-focus-within:flex group-hover:flex dark:border-slate-700 dark:bg-slate-800">
         <button
-          className="cursor-move rounded p-0.5 text-slate-300 hover:bg-slate-700"
+          className="cursor-move rounded p-0.5 text-slate-500 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700"
           title="Drag to move"
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
@@ -260,11 +260,11 @@ function AddedTextBox({
               patch: { pdfSize: Number(e.target.value) || 14 },
             })
           }
-          className="w-12 rounded border border-slate-600 bg-slate-900 px-1 py-0.5 text-xs text-slate-200"
+          className="w-12 rounded border border-slate-300 bg-white px-1 py-0.5 text-xs text-slate-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
           title="Font size (pt)"
         />
         <button
-          className="rounded p-0.5 text-slate-300 hover:bg-red-500/30 hover:text-red-300"
+          className="rounded p-0.5 text-slate-500 hover:bg-red-500/20 hover:text-red-500 dark:text-slate-300 dark:hover:text-red-300"
           title="Delete text box"
           onClick={() => dispatch({ type: 'REMOVE_ADDED', pageId, id: box.id })}
         >

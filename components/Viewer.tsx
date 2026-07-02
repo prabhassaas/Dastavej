@@ -85,16 +85,16 @@ export default function Viewer({ editMode }: { editMode: boolean }) {
   return (
     <div className="flex h-full flex-col">
       {/* Controls */}
-      <div className="flex h-12 shrink-0 items-center justify-center gap-2 border-b border-slate-800 bg-slate-900/40 px-4">
+      <div className="flex h-12 shrink-0 items-center justify-center gap-2 border-b border-slate-200 bg-white px-4 dark:border-slate-800 dark:bg-slate-900/40">
         <button
           onClick={() => dispatch({ type: 'SET_PAGE', index: state.currentPage - 1 })}
           disabled={state.currentPage === 0}
-          className="rounded-lg p-1.5 text-slate-300 hover:bg-slate-800 disabled:opacity-30"
+          className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 disabled:opacity-30 dark:text-slate-300 dark:hover:bg-slate-800"
           aria-label="Previous page"
         >
           <IconChevronLeft />
         </button>
-        <span className="min-w-24 text-center text-sm text-slate-300">
+        <span className="min-w-24 text-center text-sm text-slate-600 dark:text-slate-300">
           Page{' '}
           <input
             type="number"
@@ -102,43 +102,43 @@ export default function Viewer({ editMode }: { editMode: boolean }) {
             max={state.pages.length}
             value={state.currentPage + 1}
             onChange={(e) => dispatch({ type: 'SET_PAGE', index: Number(e.target.value) - 1 })}
-            className="w-12 rounded border border-slate-700 bg-slate-800 px-1 py-0.5 text-center text-sm"
+            className="w-12 rounded border border-slate-300 bg-white px-1 py-0.5 text-center text-sm dark:border-slate-700 dark:bg-slate-800"
           />{' '}
           / {state.pages.length}
         </span>
         <button
           onClick={() => dispatch({ type: 'SET_PAGE', index: state.currentPage + 1 })}
           disabled={state.currentPage >= state.pages.length - 1}
-          className="rounded-lg p-1.5 text-slate-300 hover:bg-slate-800 disabled:opacity-30"
+          className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 disabled:opacity-30 dark:text-slate-300 dark:hover:bg-slate-800"
           aria-label="Next page"
         >
           <IconChevronRight />
         </button>
 
-        <div className="mx-3 h-6 w-px bg-slate-700" />
+        <div className="mx-3 h-6 w-px bg-slate-200 dark:bg-slate-700" />
 
         <button
           onClick={() => zoomTo(ZOOM_STEPS[Math.max(0, (zoomIndex === -1 ? ZOOM_STEPS.length : zoomIndex) - 1)])}
-          className="rounded-lg px-2.5 py-1 text-lg leading-none text-slate-300 hover:bg-slate-800"
+          className="rounded-lg px-2.5 py-1 text-lg leading-none text-slate-500 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
           aria-label="Zoom out"
         >
           −
         </button>
-        <span className="w-14 text-center text-sm text-slate-300">
+        <span className="w-14 text-center text-sm text-slate-600 dark:text-slate-300">
           {Math.round(state.zoom * 100)}%
         </span>
         <button
           onClick={() => zoomTo(ZOOM_STEPS[Math.min(ZOOM_STEPS.length - 1, zoomIndex + 1)])}
-          className="rounded-lg px-2.5 py-1 text-lg leading-none text-slate-300 hover:bg-slate-800"
+          className="rounded-lg px-2.5 py-1 text-lg leading-none text-slate-500 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
           aria-label="Zoom in"
         >
           +
         </button>
 
-        <div className="mx-3 h-6 w-px bg-slate-700" />
+        <div className="mx-3 h-6 w-px bg-slate-200 dark:bg-slate-700" />
         <button
           onClick={() => dispatch({ type: 'ROTATE_PAGE', pageId: entry.id })}
-          className="rounded-lg p-1.5 text-slate-300 hover:bg-slate-800"
+          className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
           title="Rotate page 90°"
         >
           <IconRotate className="h-4 w-4" />
@@ -146,12 +146,12 @@ export default function Viewer({ editMode }: { editMode: boolean }) {
 
         {editMode && (
           <>
-            <div className="mx-3 h-6 w-px bg-slate-700" />
-            <div className="flex rounded-lg border border-slate-700 p-0.5 text-xs">
+            <div className="mx-3 h-6 w-px bg-slate-200 dark:bg-slate-700" />
+            <div className="flex rounded-lg border border-slate-300 p-0.5 text-xs dark:border-slate-700">
               <button
                 onClick={() => setTool('select')}
                 className={`rounded-md px-3 py-1 font-medium transition ${
-                  tool === 'select' ? 'bg-indigo-500 text-white' : 'text-slate-300 hover:text-white'
+                  tool === 'select' ? 'bg-indigo-500 text-white' : 'text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white'
                 }`}
               >
                 Edit text
@@ -159,7 +159,7 @@ export default function Viewer({ editMode }: { editMode: boolean }) {
               <button
                 onClick={() => setTool('add-text')}
                 className={`rounded-md px-3 py-1 font-medium transition ${
-                  tool === 'add-text' ? 'bg-indigo-500 text-white' : 'text-slate-300 hover:text-white'
+                  tool === 'add-text' ? 'bg-indigo-500 text-white' : 'text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white'
                 }`}
               >
                 + Add text
@@ -170,7 +170,7 @@ export default function Viewer({ editMode }: { editMode: boolean }) {
       </div>
 
       {editMode && (
-        <p className="shrink-0 border-b border-slate-800 bg-indigo-500/10 px-4 py-1.5 text-center text-xs text-indigo-200">
+        <p className="shrink-0 border-b border-slate-200 bg-indigo-500/10 px-4 py-1.5 text-center text-xs text-indigo-700 dark:border-slate-800 dark:text-indigo-200">
           {tool === 'select'
             ? 'Click any text block on the page to edit it. Changes are burned into the PDF on export.'
             : 'Click anywhere on the page to place a new text box. Drag the handle to move it.'}
@@ -178,16 +178,16 @@ export default function Viewer({ editMode }: { editMode: boolean }) {
       )}
 
       {/* Page */}
-      <div className="relative min-h-0 flex-1 overflow-auto bg-slate-950 p-8">
+      <div className="relative min-h-0 flex-1 overflow-auto bg-slate-200 p-8 dark:bg-slate-950">
         <div className="mx-auto w-fit">
-          <div className="relative shadow-2xl shadow-black/60">
+          <div className="relative shadow-2xl shadow-slate-400/50 dark:shadow-black/60">
             <canvas ref={canvasRef} className="block rounded-sm bg-white" />
             {editMode && page && viewport && (
               <EditLayer key={`${entry.id}-${state.zoom}`} pageEntry={entry} page={page} viewport={viewport} tool={tool} />
             )}
             {rendering && (
-              <div className="absolute inset-0 flex items-center justify-center bg-slate-950/30">
-                <IconSpinner className="h-8 w-8 text-indigo-400" />
+              <div className="absolute inset-0 flex items-center justify-center bg-slate-500/10 dark:bg-slate-950/30">
+                <IconSpinner className="h-8 w-8 text-indigo-500 dark:text-indigo-400" />
               </div>
             )}
           </div>

@@ -1,8 +1,14 @@
 @import 'tailwindcss';
 
-/* Subtle custom scrollbars that fit the dark UI */
+/* Class-based dark mode, toggled by ThemeProvider on <html>. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Subtle custom scrollbars that fit both themes */
 * {
   scrollbar-width: thin;
+  scrollbar-color: var(--color-slate-300) transparent;
+}
+.dark * {
   scrollbar-color: var(--color-slate-700) transparent;
 }
 *::-webkit-scrollbar {
@@ -10,10 +16,13 @@
   height: 10px;
 }
 *::-webkit-scrollbar-thumb {
-  background: var(--color-slate-700);
+  background: var(--color-slate-300);
   border-radius: 5px;
   border: 2px solid transparent;
   background-clip: content-box;
+}
+.dark *::-webkit-scrollbar-thumb {
+  background: var(--color-slate-700);
 }
 *::-webkit-scrollbar-track {
   background: transparent;

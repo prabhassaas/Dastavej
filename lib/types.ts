@@ -1,6 +1,6 @@
 /** Shared types for the workspace state. Everything lives in memory only. */
 
-export type Tab = 'view' | 'organize' | 'edit' | 'compress' | 'ocr';
+export type Tab = 'view' | 'organize' | 'edit' | 'convert' | 'form' | 'compress' | 'ocr';
 
 /** A PDF file the user loaded. Bytes are kept pristine in memory. */
 export interface SourceFile {
