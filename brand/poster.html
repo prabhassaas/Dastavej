@@ -1,0 +1,138 @@
+<!doctype html>
+<!-- Dastavej marketing poster — source of truth. Export: node scripts/render-brand.mjs -->
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1080px; height: 1350px; }
+  body {
+    font-family: 'Segoe UI', Helvetica, Arial, sans-serif;
+    color: #f8fafc;
+    background:
+      radial-gradient(700px 500px at 85% -5%, rgba(99,102,241,.32), transparent 65%),
+      radial-gradient(600px 420px at -10% 55%, rgba(139,92,246,.22), transparent 60%),
+      linear-gradient(160deg, #0b1020 0%, #0e142e 55%, #0b1020 100%);
+    overflow: hidden;
+    position: relative;
+  }
+  /* faint grid */
+  body::before {
+    content: ''; position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(148,163,184,.06) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(148,163,184,.06) 1px, transparent 1px);
+    background-size: 54px 54px;
+    mask-image: radial-gradient(900px 700px at 50% 30%, #000 40%, transparent 100%);
+  }
+  .wrap { position: relative; padding: 56px 64px; height: 100%; display: flex; flex-direction: column; }
+
+  .top { display: flex; align-items: center; justify-content: space-between; }
+  .lockup { display: flex; align-items: center; gap: 18px; }
+  .lockup .name { font-size: 42px; font-weight: 700; letter-spacing: -1px; }
+  .pill {
+    font-size: 17px; font-weight: 600; color: #c7d2fe;
+    border: 1.5px solid rgba(99,102,241,.55); border-radius: 999px;
+    padding: 9px 20px; background: rgba(99,102,241,.12);
+  }
+
+  .headline { margin-top: 58px; font-size: 92px; font-weight: 800; letter-spacing: -3px; line-height: 1.04; }
+  .headline .grad {
+    background: linear-gradient(90deg, #818cf8, #a78bfa 55%, #f59e0b 110%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .sub { margin-top: 26px; font-size: 26px; line-height: 1.5; color: #cbd5e1; max-width: 900px; }
+  .sub b { color: #f8fafc; }
+
+  .shot {
+    margin: 46px auto 0; width: 880px; border-radius: 18px; overflow: hidden;
+    transform: rotate(-1.3deg);
+    border: 1px solid rgba(148,163,184,.25);
+    box-shadow: 0 30px 80px rgba(0,0,0,.55), 0 0 120px rgba(99,102,241,.25);
+    background: #0f172a;
+  }
+  .chrome { display: flex; align-items: center; gap: 8px; padding: 12px 16px; background: #141b33; border-bottom: 1px solid rgba(148,163,184,.15); }
+  .dot { width: 12px; height: 12px; border-radius: 50%; }
+  .url {
+    margin-left: 14px; flex: 1; font-size: 14px; color: #94a3b8;
+    background: rgba(148,163,184,.12); border-radius: 8px; padding: 6px 14px;
+  }
+  .shot img { display: block; width: 100%; }
+
+  .chips { margin-top: 52px; display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; }
+  .chip {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 21px; font-weight: 600; color: #e2e8f0;
+    background: rgba(30,41,59,.75); border: 1px solid rgba(148,163,184,.22);
+    border-radius: 14px; padding: 14px 22px;
+  }
+  .chip .ic { width: 12px; height: 12px; border-radius: 4px; background: linear-gradient(135deg, #6366f1, #8b5cf6); }
+  .chip .ic.amber { background: linear-gradient(135deg, #f59e0b, #fbbf24); }
+
+  .foot { margin-top: auto; display: flex; align-items: center; justify-content: space-between; }
+  .privacy { display: flex; align-items: center; gap: 12px; font-size: 22px; font-weight: 600; color: #6ee7b7; }
+  .repo { font-size: 20px; color: #94a3b8; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div class="lockup">
+      <svg width="72" height="72" viewBox="0 0 64 64">
+        <defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#6366f1"/><stop offset="1" stop-color="#8b5cf6"/>
+        </linearGradient></defs>
+        <rect width="64" height="64" rx="14" fill="url(#bg)"/>
+        <path d="M20 13h15l9 9v26a3 3 0 0 1-3 3H20a3 3 0 0 1-3-3V16a3 3 0 0 1 3-3Z" fill="#fff"/>
+        <path d="M35 13l9 9h-9z" fill="#c7d2fe"/>
+        <rect x="22" y="28" width="17" height="3.2" rx="1.6" fill="#a5b4fc"/>
+        <rect x="22" y="35" width="12" height="3.2" rx="1.6" fill="#c7d2fe"/>
+        <g transform="translate(45 33) rotate(45)">
+          <rect x="-3.4" y="-3" width="6.8" height="3.4" rx="1.4" fill="#fde68a"/>
+          <rect x="-3.4" y="0.8" width="6.8" height="15" rx="1.2" fill="#f59e0b"/>
+          <path d="M-3.4 15.8 L0 22 L3.4 15.8 Z" fill="#78350f"/>
+        </g>
+      </svg>
+      <div class="name">Dastavej</div>
+    </div>
+    <div class="pill">v1.1.0 &nbsp;•&nbsp; 100% Free &amp; Open</div>
+  </div>
+
+  <div class="headline">Your PDFs.<br><span class="grad">Your browser. Zero uploads.</span></div>
+  <div class="sub">
+    Edit text, merge &amp; organize pages, compress, convert to Office, run OCR and build
+    fillable forms — <b>everything happens on your device</b>. No servers, no accounts, no cost.
+  </div>
+
+  <div class="shot">
+    <div class="chrome">
+      <div class="dot" style="background:#f87171"></div>
+      <div class="dot" style="background:#fbbf24"></div>
+      <div class="dot" style="background:#34d399"></div>
+      <div class="url">dastavej — works offline, right in your browser</div>
+    </div>
+    <img src="app-screenshot.png" alt="Dastavej app">
+  </div>
+
+  <div class="chips">
+    <div class="chip"><span class="ic"></span>Edit text</div>
+    <div class="chip"><span class="ic"></span>Merge &amp; organize</div>
+    <div class="chip"><span class="ic amber"></span>Compress</div>
+    <div class="chip"><span class="ic"></span>Word · Excel · PPT</div>
+    <div class="chip"><span class="ic amber"></span>OCR</div>
+    <div class="chip"><span class="ic"></span>Fillable forms</div>
+  </div>
+
+  <div class="foot">
+    <div class="privacy">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1Z"/>
+        <path d="m9 12 2 2 4-4"/>
+      </svg>
+      Your files never leave your device
+    </div>
+    <div class="repo">github.com/prabhassaas/dastavej</div>
+  </div>
+</div>
+</body>
+</html>

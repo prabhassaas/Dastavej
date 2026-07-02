@@ -12,6 +12,7 @@ import FormWizard from './FormWizard';
 import CompressPanel from './CompressPanel';
 import OcrPanel from './OcrPanel';
 import ErrorToast from './ErrorToast';
+import { LogoMark } from './Logo';
 import {
   IconConvert,
   IconEye,
@@ -44,8 +45,8 @@ function Workspace() {
     <div className="flex h-full">
       {/* Sidebar */}
       <nav className="flex w-20 shrink-0 flex-col items-center border-r border-slate-200 bg-white py-4 dark:border-slate-800 dark:bg-slate-900/60">
-        <div className="mb-6 flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-500 font-bold text-white shadow-lg shadow-indigo-500/30">
-          Dv
+        <div className="mb-6 rounded-xl shadow-lg shadow-indigo-500/30" title="Dastavej">
+          <LogoMark className="h-10 w-10" />
         </div>
         <div className="flex flex-col gap-1">
           {TABS.map((tab) => {
