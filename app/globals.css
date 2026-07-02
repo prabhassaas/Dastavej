@@ -1,0 +1,27 @@
+@import 'tailwindcss';
+
+/* Subtle custom scrollbars that fit the dark UI */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-slate-700) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--color-slate-700);
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Text-edit overlays should feel native to the page they sit on */
+.pdf-overlay-textarea {
+  resize: none;
+  overflow: hidden;
+  white-space: pre;
+}
