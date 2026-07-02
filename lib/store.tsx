@@ -9,8 +9,11 @@ import {
   type ReactNode,
 } from 'react';
 import {
+  DEFAULT_MARKS,
   uid,
   type AddedText,
+  type Annotation,
+  type DocMarks,
   type PageEntry,
   type SourceFile,
   type Tab,
@@ -23,6 +26,8 @@ const initialState: WorkspaceState = {
   sources: {},
   pages: [],
   edits: {},
+  annots: {},
+  marks: DEFAULT_MARKS,
   tab: 'view',
   currentPage: 0,
   zoom: 1,
@@ -44,6 +49,12 @@ type Action =
   | { type: 'ADD_TEXT'; pageId: string; added: AddedText }
   | { type: 'UPDATE_ADDED'; pageId: string; id: string; patch: Partial<AddedText> }
   | { type: 'REMOVE_ADDED'; pageId: string; id: string }
+  | { type: 'ADD_ANNOT'; pageId: string; annot: Annotation }
+  | { type: 'UPDATE_ANNOT'; pageId: string; id: string; patch: Partial<Annotation> }
+  | { type: 'REMOVE_ANNOT'; pageId: string; id: string }
+  | { type: 'SET_MARKS'; marks: DocMarks }
+  | { type: 'DUPLICATE_PAGE'; pageId: string }
+  | { type: 'REVERSE_PAGES' }
   | { type: 'SET_ERROR'; error: string | null };
 
 function pagesForSource(source: SourceFile): PageEntry[] {
@@ -94,13 +105,26 @@ function reducer(state: WorkspaceState, action: Action): WorkspaceState {
       const pages = state.pages.filter((p) => p.id !== action.pageId);
       const edits = { ...state.edits };
       delete edits[action.pageId];
+      const annots = { ...state.annots };
+      delete annots[action.pageId];
       return {
         ...state,
         pages,
         edits,
+        annots,
         currentPage: clampPage(state.currentPage, pages.length),
       };
     }
+    case 'DUPLICATE_PAGE': {
+      const index = state.pages.findIndex((p) => p.id === action.pageId);
+      if (index === -1) return state;
+      const copy = { ...state.pages[index], id: uid() };
+      const pages = [...state.pages];
+      pages.splice(index + 1, 0, copy);
+      return { ...state, pages };
+    }
+    case 'REVERSE_PAGES':
+      return { ...state, pages: [...state.pages].reverse(), currentPage: 0 };
     case 'ROTATE_PAGE': {
       return {
         ...state,
@@ -170,6 +194,34 @@ function reducer(state: WorkspaceState, action: Action): WorkspaceState {
         },
       };
     }
+    case 'ADD_ANNOT': {
+      const list = state.annots[action.pageId] ?? [];
+      return {
+        ...state,
+        annots: { ...state.annots, [action.pageId]: [...list, action.annot] },
+      };
+    }
+    case 'UPDATE_ANNOT': {
+      const list = state.annots[action.pageId] ?? [];
+      return {
+        ...state,
+        annots: {
+          ...state.annots,
+          [action.pageId]: list.map((a) =>
+            a.id === action.id ? ({ ...a, ...action.patch } as Annotation) : a,
+          ),
+        },
+      };
+    }
+    case 'REMOVE_ANNOT': {
+      const list = state.annots[action.pageId] ?? [];
+      return {
+        ...state,
+        annots: { ...state.annots, [action.pageId]: list.filter((a) => a.id !== action.id) },
+      };
+    }
+    case 'SET_MARKS':
+      return { ...state, marks: action.marks };
     case 'SET_ERROR':
       return { ...state, error: action.error };
     default:

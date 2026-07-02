@@ -4,27 +4,87 @@ import { useEffect, useRef, useState } from 'react';
 import type { PDFPageProxy } from 'pdfjs-dist';
 import { usePdfStore } from '@/lib/store';
 import { getCachedDoc } from '@/lib/pdfCache';
-import type { ViewportLike } from '@/lib/types';
+import { ANNOT_COLORS, uid, type ViewportLike } from '@/lib/types';
 import EditLayer from './EditLayer';
+import AnnotateLayer, { type AnnotTool } from './AnnotateLayer';
 import { IconChevronLeft, IconChevronRight, IconRotate, IconSpinner } from './Icons';
 
 const ZOOM_STEPS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3];
 
 export type EditTool = 'select' | 'add-text';
+export type ViewerMode = 'view' | 'edit' | 'annotate';
+
+const ANNOT_TOOLS: { id: AnnotTool; label: string }[] = [
+  { id: 'highlight', label: 'Highlight' },
+  { id: 'box', label: 'Box' },
+  { id: 'ink', label: 'Draw' },
+  { id: 'image', label: 'Image / sign' },
+];
+
+const ANNOT_HINTS: Record<AnnotTool, string> = {
+  highlight: 'Drag across the page to highlight an area. Pick a color on the right.',
+  box: 'Drag to draw an outlined box around content.',
+  ink: 'Draw freehand with the mouse or a touch pen — great for signatures.',
+  image: 'Upload a signature, stamp or photo, then drag to position and resize it.',
+};
 
 /**
  * Single-page viewer with zoom and pagination, rendered via pdf.js.
- * In edit mode, an HTML overlay maps PDF text blocks to editable textareas.
+ * Edit mode overlays editable textareas on text blocks; annotate mode adds
+ * highlights, boxes, freehand ink and image stamps.
  */
-export default function Viewer({ editMode }: { editMode: boolean }) {
+export default function Viewer({ mode }: { mode: ViewerMode }) {
   const { state, dispatch } = usePdfStore();
   const entry = state.pages[state.currentPage];
+  const editMode = mode === 'edit';
+  const annotateMode = mode === 'annotate';
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const [page, setPage] = useState<PDFPageProxy | null>(null);
   const [viewport, setViewport] = useState<ViewportLike | null>(null);
   const [rendering, setRendering] = useState(false);
   const [tool, setTool] = useState<EditTool>('select');
+  const [annotTool, setAnnotTool] = useState<AnnotTool>('highlight');
+  const [annotColor, setAnnotColor] = useState(ANNOT_COLORS.yellow);
+
+  /** Place an uploaded image (signature/stamp/photo) on the current page. */
+  const placeImage = async (file: File) => {
+    if (!viewport || !entry) return;
+    const mime = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+    if (file.type !== 'image/png' && file.type !== 'image/jpeg') {
+      dispatch({ type: 'SET_ERROR', error: 'Please choose a PNG or JPEG image.' });
+      return;
+    }
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const previewUrl = URL.createObjectURL(new Blob([bytes.slice().buffer], { type: mime }));
+    const natural = await new Promise<{ w: number; h: number }>((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
+      img.onerror = reject;
+      img.src = previewUrl;
+    });
+    // Place at ~1/3 page width, centered.
+    const [pw] = viewport.convertToPdfPoint(viewport.width, 0);
+    const w = pw / 3;
+    const h = (w * natural.h) / natural.w;
+    const [cx, cy] = viewport.convertToPdfPoint(viewport.width / 2, viewport.height / 2);
+    dispatch({
+      type: 'ADD_ANNOT',
+      pageId: entry.id,
+      annot: {
+        id: uid(),
+        kind: 'image',
+        x: cx - w / 2,
+        y: cy - h / 2,
+        w,
+        h,
+        bytes,
+        mime,
+        previewUrl,
+      },
+    });
+  };
 
   useEffect(() => {
     if (!entry) return;
@@ -167,6 +227,54 @@ export default function Viewer({ editMode }: { editMode: boolean }) {
             </div>
           </>
         )}
+
+        {annotateMode && (
+          <>
+            <div className="mx-3 h-6 w-px bg-slate-200 dark:bg-slate-700" />
+            <div className="flex rounded-lg border border-slate-300 p-0.5 text-xs dark:border-slate-700">
+              {ANNOT_TOOLS.map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => {
+                    setAnnotTool(t.id);
+                    if (t.id === 'image') imageInputRef.current?.click();
+                  }}
+                  className={`rounded-md px-3 py-1 font-medium transition ${
+                    annotTool === t.id
+                      ? 'bg-indigo-500 text-white'
+                      : 'text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white'
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            <div className="ml-2 flex items-center gap-1.5">
+              {Object.entries(ANNOT_COLORS).map(([name, hex]) => (
+                <button
+                  key={name}
+                  onClick={() => setAnnotColor(hex)}
+                  className={`h-5 w-5 rounded-full border-2 transition ${
+                    annotColor === hex ? 'scale-110 border-slate-900 dark:border-white' : 'border-transparent'
+                  }`}
+                  style={{ background: hex }}
+                  title={name}
+                />
+              ))}
+            </div>
+            <input
+              ref={imageInputRef}
+              type="file"
+              accept="image/png,image/jpeg"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void placeImage(f);
+                e.target.value = '';
+              }}
+            />
+          </>
+        )}
       </div>
 
       {editMode && (
@@ -177,6 +285,12 @@ export default function Viewer({ editMode }: { editMode: boolean }) {
         </p>
       )}
 
+      {annotateMode && (
+        <p className="shrink-0 border-b border-slate-200 bg-indigo-500/10 px-4 py-1.5 text-center text-xs text-indigo-700 dark:border-slate-800 dark:text-indigo-200">
+          {ANNOT_HINTS[annotTool]} Annotations are burned into the PDF on export.
+        </p>
+      )}
+
       {/* Page */}
       <div className="relative min-h-0 flex-1 overflow-auto bg-slate-200 p-8 dark:bg-slate-950">
         <div className="mx-auto w-fit">
@@ -184,6 +298,37 @@ export default function Viewer({ editMode }: { editMode: boolean }) {
             <canvas ref={canvasRef} className="block rounded-sm bg-white" />
             {editMode && page && viewport && (
               <EditLayer key={`${entry.id}-${state.zoom}`} pageEntry={entry} page={page} viewport={viewport} tool={tool} />
+            )}
+            {annotateMode && viewport && (
+              <AnnotateLayer
+                key={`annot-${entry.id}-${state.zoom}`}
+                pageEntry={entry}
+                viewport={viewport}
+                tool={annotTool}
+                color={annotColor}
+              />
+            )}
+            {/* live preview of document marks (watermark + header/footer) */}
+            {viewport && state.marks.watermark.enabled && state.marks.watermark.text.trim() && (
+              <div
+                className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden"
+                style={{ opacity: state.marks.watermark.opacity }}
+              >
+                <span
+                  className="-rotate-45 font-bold whitespace-nowrap"
+                  style={{
+                    fontSize: state.marks.watermark.fontSize * state.zoom,
+                    color:
+                      state.marks.watermark.color === 'red'
+                        ? '#dc2626'
+                        : state.marks.watermark.color === 'indigo'
+                          ? '#6366f1'
+                          : '#8a919c',
+                  }}
+                >
+                  {state.marks.watermark.text}
+                </span>
+              </div>
             )}
             {rendering && (
               <div className="absolute inset-0 flex items-center justify-center bg-slate-500/10 dark:bg-slate-950/30">

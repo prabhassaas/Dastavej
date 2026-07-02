@@ -68,7 +68,7 @@ export default function ConvertPanel() {
       const onProgress = (p: ConvertProgress) => setProgress(p);
       // Convert the assembled working document, so page order, deletions
       // and text edits are all reflected in the output.
-      const assembled = await assemblePdf(state.sources, state.pages, state.edits);
+      const assembled = await assemblePdf(state.sources, state.pages, state.edits, { annots: state.annots, marks: state.marks });
       const doc = await openForConversion(assembled);
       try {
         const bytes =

@@ -65,13 +65,26 @@ const PLACEHOLDERS: Partial<Record<FormFieldType, string>> = {
   phone: '+00 00000 00000',
 };
 
+/** Standard passport-photo box, 35 × 45 mm in points. */
+const PHOTO_W = 99.2;
+const PHOTO_H = 127.6;
+
+export interface FormLogo {
+  bytes: Uint8Array;
+  mime: 'image/png' | 'image/jpeg';
+}
+
 export async function buildFormPdf(options: {
   title: string;
   fields: FormFieldSpec[];
   pageSize: keyof typeof PAGE_SIZES;
   orientation: Orientation;
+  /** organization logo drawn top-left of the header */
+  logo?: FormLogo | null;
+  /** reserve an "affix photograph" box top-right (35×45 mm) */
+  photoBox?: boolean;
 }): Promise<Uint8Array> {
-  const { title, fields, pageSize, orientation } = options;
+  const { title, fields, pageSize, orientation, logo, photoBox } = options;
   const [pw, ph] = PAGE_SIZES[pageSize] ?? PAGE_SIZES.A4;
   const [width, height] = orientation === 'landscape' ? [ph, pw] : [pw, ph];
 
@@ -92,18 +105,62 @@ export async function buildFormPdf(options: {
     }
   };
 
-  // Title block
-  if (title.trim()) {
-    page.drawText(sanitize(title), { x: MARGIN, y: y - 20, size: 20, font: bold });
-    y -= 32;
-    page.drawLine({
-      start: { x: MARGIN, y },
-      end: { x: width - MARGIN, y },
-      thickness: 1,
-      color: rgb(0.35, 0.4, 0.95),
-    });
-    y -= 24;
+  // ── Header: logo (left) + title + photo box (right) ──────────────────────
+  const headerTop = y;
+  let titleX = MARGIN;
+
+  if (logo) {
+    const img =
+      logo.mime === 'image/png' ? await doc.embedPng(logo.bytes) : await doc.embedJpg(logo.bytes);
+    const logoH = 44;
+    const logoW = (img.width / img.height) * logoH;
+    page.drawImage(img, { x: MARGIN, y: headerTop - logoH, width: logoW, height: logoH });
+    titleX = MARGIN + logoW + 14;
   }
+
+  if (title.trim()) {
+    // keep the title clear of the photo box
+    const titleY = logo ? headerTop - 28 : headerTop - 20;
+    page.drawText(sanitize(title), { x: titleX, y: titleY, size: 20, font: bold });
+  }
+
+  if (photoBox) {
+    const bx = width - MARGIN - PHOTO_W;
+    const by = headerTop - PHOTO_H;
+    page.drawRectangle({
+      x: bx,
+      y: by,
+      width: PHOTO_W,
+      height: PHOTO_H,
+      borderColor: rgb(0.45, 0.5, 0.6),
+      borderWidth: 1,
+    });
+    const lines = ['Affix recent', 'photograph', '(35 × 45 mm)'];
+    lines.forEach((line, i) => {
+      const lw = font.widthOfTextAtSize(line, 8);
+      page.drawText(line, {
+        x: bx + (PHOTO_W - lw) / 2,
+        y: by + PHOTO_H / 2 + 10 - i * 11,
+        size: 8,
+        font,
+        color: rgb(0.55, 0.58, 0.65),
+      });
+    });
+  }
+
+  // fields begin below the tallest header element
+  const headerBottom = Math.min(
+    headerTop - (title.trim() || logo ? 44 : 0),
+    photoBox ? headerTop - PHOTO_H - 8 : Infinity,
+  );
+  y = headerBottom;
+  page.drawLine({
+    start: { x: MARGIN, y },
+    end: { x: width - MARGIN, y },
+    thickness: 1,
+    color: rgb(0.35, 0.4, 0.95),
+  });
+  y -= 24;
 
   const usedNames = new Set<string>();
   const uniqueName = (label: string) => {
@@ -242,7 +299,22 @@ export async function buildFormPdf(options: {
   return doc.save();
 }
 
+const PUNCT_MAP: Record<string, string> = {
+  '—': '-',
+  '–': '-',
+  '‘': "'",
+  '’': "'",
+  '“': '"',
+  '”': '"',
+  '…': '...',
+  '•': '-',
+};
+
 function sanitize(text: string): string {
-  // eslint-disable-next-line no-control-regex
-  return text.replace(/[^\n\x20-\x7E\xA0-\xFF]/g, '?');
+  return (
+    text
+      .replace(/[—–‘’“”…•]/g, (c) => PUNCT_MAP[c])
+      // eslint-disable-next-line no-control-regex
+      .replace(/[^\n\x20-\x7E\xA0-\xFF]/g, '?')
+  );
 }

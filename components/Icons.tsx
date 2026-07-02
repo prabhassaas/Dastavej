@@ -231,3 +231,62 @@ export function IconSpinner({ className = base }: IconProps) {
     </svg>
   );
 }
+
+export function IconHighlight({ className = base }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m9 11-6 6v3h3l6-6" />
+      <path d="m14 6 4 4" />
+      <path d="M12.5 7.5 17 3l4 4-4.5 4.5" />
+      <path d="M9 11l4 4" />
+    </svg>
+  );
+}
+
+export function IconDroplet({ className = base }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 2.7 6.9 8.6a7 7 0 1 0 10.2 0Z" />
+    </svg>
+  );
+}
+
+export function IconCopy({ className = base }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="9" y="9" width="12" height="12" rx="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </svg>
+  );
+}
+
+export function IconExtract({ className = base }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
+      <path d="M14 2v6h6" />
+      <path d="M12 18v-6" />
+      <path d="m9 15 3 3 3-3" />
+    </svg>
+  );
+}
+
+export function IconTable({ className = base }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M3 10h18" />
+      <path d="M9 4v16" />
+    </svg>
+  );
+}
+
+export function IconImage({ className = base }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <circle cx="9" cy="9" r="2" />
+      <path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21" />
+    </svg>
+  );
+}

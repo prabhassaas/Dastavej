@@ -53,7 +53,7 @@ export default function Header() {
   const handleExport = async () => {
     setExporting(true);
     try {
-      const bytes = await assemblePdf(state.sources, state.pages, state.edits);
+      const bytes = await assemblePdf(state.sources, state.pages, state.edits, { annots: state.annots, marks: state.marks });
       downloadBytes(bytes, exportName);
     } catch (err) {
       dispatch({
@@ -68,7 +68,7 @@ export default function Header() {
   const handlePrint = async () => {
     setPrinting(true);
     try {
-      const bytes = await assemblePdf(state.sources, state.pages, state.edits);
+      const bytes = await assemblePdf(state.sources, state.pages, state.edits, { annots: state.annots, marks: state.marks });
       await printPdf(bytes, true);
     } catch (err) {
       dispatch({

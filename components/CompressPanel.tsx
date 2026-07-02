@@ -38,7 +38,7 @@ export default function CompressPanel() {
     try {
       // Compress the assembled working document (order, deletions and edits
       // included), so what you download is exactly what you see.
-      const assembled = await assemblePdf(state.sources, state.pages, state.edits);
+      const assembled = await assemblePdf(state.sources, state.pages, state.edits, { annots: state.annots, marks: state.marks });
       const originalSize = assembled.byteLength;
 
       const worker = new Worker(new URL('../workers/compress.worker.ts', import.meta.url), {

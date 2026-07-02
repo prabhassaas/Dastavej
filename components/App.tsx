@@ -10,14 +10,17 @@ import PageOrganizer from './PageOrganizer';
 import ConvertPanel from './ConvertPanel';
 import FormWizard from './FormWizard';
 import CompressPanel from './CompressPanel';
+import MarksPanel from './MarksPanel';
 import OcrPanel from './OcrPanel';
 import ErrorToast from './ErrorToast';
 import { LogoMark } from './Logo';
 import {
   IconConvert,
+  IconDroplet,
   IconEye,
   IconForm,
   IconGrid,
+  IconHighlight,
   IconMoon,
   IconPencil,
   IconScan,
@@ -30,6 +33,8 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode; needsDoc: boolean }
   { id: 'view', label: 'View', icon: <IconEye />, needsDoc: true },
   { id: 'organize', label: 'Organize', icon: <IconGrid />, needsDoc: true },
   { id: 'edit', label: 'Edit', icon: <IconPencil />, needsDoc: true },
+  { id: 'annotate', label: 'Annotate', icon: <IconHighlight />, needsDoc: true },
+  { id: 'marks', label: 'Watermark', icon: <IconDroplet />, needsDoc: true },
   { id: 'convert', label: 'Convert', icon: <IconConvert />, needsDoc: true },
   { id: 'form', label: 'Forms', icon: <IconForm />, needsDoc: false },
   { id: 'compress', label: 'Compress', icon: <IconShrink />, needsDoc: true },
@@ -104,8 +109,10 @@ function Workspace() {
             <DropZone fullScreen />
           ) : (
             <>
-              {state.tab === 'view' && <Viewer editMode={false} />}
-              {state.tab === 'edit' && <Viewer editMode />}
+              {state.tab === 'view' && <Viewer mode="view" />}
+              {state.tab === 'edit' && <Viewer mode="edit" />}
+              {state.tab === 'annotate' && <Viewer mode="annotate" />}
+              {state.tab === 'marks' && <MarksPanel />}
               {state.tab === 'organize' && <PageOrganizer />}
               {state.tab === 'convert' && <ConvertPanel />}
               {state.tab === 'compress' && <CompressPanel />}

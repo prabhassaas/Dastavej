@@ -1,6 +1,71 @@
 /** Shared types for the workspace state. Everything lives in memory only. */
 
-export type Tab = 'view' | 'organize' | 'edit' | 'convert' | 'form' | 'compress' | 'ocr';
+export type Tab =
+  | 'view'
+  | 'organize'
+  | 'edit'
+  | 'annotate'
+  | 'marks'
+  | 'convert'
+  | 'form'
+  | 'compress'
+  | 'ocr';
+
+/**
+ * Page annotations (highlight, freehand ink, box, stamped image), stored in
+ * PDF user space so they can be burned in exactly with pdf-lib on export.
+ */
+export type Annotation =
+  | { id: string; kind: 'highlight'; x: number; y: number; w: number; h: number; color: string }
+  | { id: string; kind: 'box'; x: number; y: number; w: number; h: number; color: string }
+  | { id: string; kind: 'ink'; points: [number, number][]; color: string; strokeWidth: number }
+  | {
+      id: string;
+      kind: 'image';
+      x: number;
+      y: number;
+      w: number;
+      h: number;
+      /** PNG or JPEG bytes of the stamped image (signature, logo, photo…) */
+      bytes: Uint8Array;
+      mime: 'image/png' | 'image/jpeg';
+      /** object URL for on-screen preview */
+      previewUrl: string;
+    };
+
+/** Annotation palette (name → hex) shared by the overlay and the export. */
+export const ANNOT_COLORS: Record<string, string> = {
+  yellow: '#facc15',
+  green: '#4ade80',
+  blue: '#60a5fa',
+  pink: '#f472b6',
+  red: '#ef4444',
+};
+
+/** Document-level watermark + header/footer settings, applied on export. */
+export interface DocMarks {
+  watermark: {
+    enabled: boolean;
+    text: string;
+    /** 0..1 */
+    opacity: number;
+    fontSize: number;
+    color: 'gray' | 'red' | 'indigo';
+  };
+  headerFooter: {
+    enabled: boolean;
+    /** supports the {date} placeholder */
+    headerText: string;
+    footerText: string;
+    /** '' = none */
+    pageNumbers: '' | 'Page {page}' | '{page} of {total}' | '{page}';
+  };
+}
+
+export const DEFAULT_MARKS: DocMarks = {
+  watermark: { enabled: false, text: 'CONFIDENTIAL', opacity: 0.15, fontSize: 64, color: 'gray' },
+  headerFooter: { enabled: false, headerText: '', footerText: '', pageNumbers: 'Page {page}' },
+};
 
 /** A PDF file the user loaded. Bytes are kept pristine in memory. */
 export interface SourceFile {
@@ -65,6 +130,10 @@ export interface WorkspaceState {
   pages: PageEntry[];
   /** keyed by PageEntry.id */
   edits: Record<string, PageEdits>;
+  /** annotations keyed by PageEntry.id */
+  annots: Record<string, Annotation[]>;
+  /** document-level watermark / header / footer settings */
+  marks: DocMarks;
   tab: Tab;
   /** index into `pages` */
   currentPage: number;

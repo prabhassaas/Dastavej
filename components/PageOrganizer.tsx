@@ -2,8 +2,11 @@
 
 import { useRef, useState } from 'react';
 import { usePdfStore } from '@/lib/store';
+import { assemblePdf } from '@/lib/export';
+import { downloadBytes } from '@/lib/download';
+import type { PageEntry } from '@/lib/types';
 import PageThumb from './PageThumb';
-import { IconPlus, IconRotate, IconTrash } from './Icons';
+import { IconCopy, IconExtract, IconPlus, IconRotate, IconTrash } from './Icons';
 
 /**
  * Grid of page thumbnails. Drag to reorder, delete or rotate single pages,
@@ -27,6 +30,21 @@ export default function PageOrganizer() {
     setOverIndex(null);
   };
 
+  /** Download a single page as its own PDF (Foxit-style "Extract"). */
+  const extractPage = async (entry: PageEntry, index: number) => {
+    try {
+      const bytes = await assemblePdf(state.sources, [entry], state.edits, {
+        annots: state.annots,
+      });
+      downloadBytes(bytes, `page-${index + 1}.pdf`);
+    } catch (err) {
+      dispatch({
+        type: 'SET_ERROR',
+        error: `Could not extract page: ${err instanceof Error ? err.message : String(err)}`,
+      });
+    }
+  };
+
   return (
     <div className="h-full overflow-auto p-6">
       <div className="mb-4 flex items-center justify-between">
@@ -34,13 +52,23 @@ export default function PageOrganizer() {
           Drag pages to reorder{multipleSources ? ' — pages from all files can be interleaved' : ''}.
           Deletions and ordering apply on export.
         </p>
-        <button
-          onClick={() => inputRef.current?.click()}
-          className="flex items-center gap-1.5 rounded-lg border border-dashed border-slate-400 px-3 py-1.5 text-sm text-slate-600 transition hover:border-indigo-400 hover:text-indigo-500 dark:border-slate-600 dark:text-slate-300 dark:hover:text-indigo-300"
-        >
-          <IconPlus className="h-4 w-4" />
-          Add / merge PDFs
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => dispatch({ type: 'REVERSE_PAGES' })}
+            disabled={state.pages.length < 2}
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 transition hover:border-indigo-400 hover:text-indigo-500 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:text-indigo-300"
+            title="Reverse the page order"
+          >
+            Reverse order
+          </button>
+          <button
+            onClick={() => inputRef.current?.click()}
+            className="flex items-center gap-1.5 rounded-lg border border-dashed border-slate-400 px-3 py-1.5 text-sm text-slate-600 transition hover:border-indigo-400 hover:text-indigo-500 dark:border-slate-600 dark:text-slate-300 dark:hover:text-indigo-300"
+          >
+            <IconPlus className="h-4 w-4" />
+            Add / merge PDFs
+          </button>
+        </div>
         <input
           ref={inputRef}
           type="file"
@@ -109,6 +137,26 @@ export default function PageOrganizer() {
                   title="Rotate 90°"
                 >
                   <IconRotate className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    dispatch({ type: 'DUPLICATE_PAGE', pageId: entry.id });
+                  }}
+                  className="rounded-md bg-slate-700/90 p-1.5 text-white shadow hover:bg-indigo-500 dark:bg-slate-900/90"
+                  title="Duplicate page"
+                >
+                  <IconCopy className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void extractPage(entry, index);
+                  }}
+                  className="rounded-md bg-slate-700/90 p-1.5 text-white shadow hover:bg-indigo-500 dark:bg-slate-900/90"
+                  title="Extract page as its own PDF"
+                >
+                  <IconExtract className="h-3.5 w-3.5" />
                 </button>
                 <button
                   onClick={(e) => {

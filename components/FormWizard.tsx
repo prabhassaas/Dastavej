@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { usePdfStore } from '@/lib/store';
 import {
   FIELD_TYPES,
@@ -8,8 +8,17 @@ import {
   buildFormPdf,
   type FormFieldSpec,
   type FormFieldType,
+  type FormLogo,
   type Orientation,
 } from '@/lib/formBuilder';
+import { FORM_TEMPLATES, type FormTemplate } from '@/lib/formTemplates';
+import {
+  collectColumns,
+  exportRowsToCsv,
+  exportRowsToXlsx,
+  extractFormData,
+  type FormRow,
+} from '@/lib/formData';
 import { downloadBytes } from '@/lib/download';
 import { uid } from '@/lib/types';
 import {
@@ -17,9 +26,12 @@ import {
   IconArrowUp,
   IconDownload,
   IconForm,
+  IconImage,
   IconPlus,
   IconSpinner,
+  IconTable,
   IconTrash,
+  IconX,
 } from './Icons';
 
 const needsOptions = (t: FormFieldType) => t === 'dropdown' || t === 'radio';
@@ -41,13 +53,41 @@ const INITIAL_FIELDS = (): FormFieldSpec[] => [
 export default function FormWizard() {
   const { dispatch, addGeneratedPdf } = usePdfStore();
 
+  const [mode, setMode] = useState<'design' | 'responses'>('design');
   const [title, setTitle] = useState('My Form');
   const [fileName, setFileName] = useState('my-form');
   const [pageSize, setPageSize] = useState<keyof typeof PAGE_SIZES>('A4');
   const [orientation, setOrientation] = useState<Orientation>('portrait');
   const [fields, setFields] = useState<FormFieldSpec[]>(INITIAL_FIELDS);
+  const [photoBox, setPhotoBox] = useState(false);
+  const [logo, setLogo] = useState<(FormLogo & { previewUrl: string }) | null>(null);
+  const [templateId, setTemplateId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+
+  const loadTemplate = (t: FormTemplate) => {
+    setTemplateId(t.id);
+    setTitle(t.title);
+    setFileName(t.fileName);
+    setPhotoBox(t.photoBox);
+    setFields(t.fields.map((tf) => ({ ...tf, id: uid() })));
+    setSavedMsg(null);
+  };
+
+  const pickLogo = async (file: File) => {
+    if (file.type !== 'image/png' && file.type !== 'image/jpeg') {
+      dispatch({ type: 'SET_ERROR', error: 'Logo must be a PNG or JPEG image.' });
+      return;
+    }
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const mime = file.type as FormLogo['mime'];
+    setLogo({
+      bytes,
+      mime,
+      previewUrl: URL.createObjectURL(new Blob([bytes.slice().buffer], { type: mime })),
+    });
+  };
 
   const patchField = (id: string, patch: Partial<FormFieldSpec>) =>
     setFields((fs) => fs.map((f) => (f.id === id ? { ...f, ...patch } : f)));
@@ -68,6 +108,8 @@ export default function FormWizard() {
       fields: fields.filter((f) => f.label.trim() || f.options.length),
       pageSize,
       orientation,
+      logo,
+      photoBox,
     });
 
   const handleSave = async (openInEditor: boolean) => {
@@ -103,6 +145,9 @@ export default function FormWizard() {
     setPageSize('A4');
     setOrientation('portrait');
     setFields(INITIAL_FIELDS());
+    setPhotoBox(false);
+    setLogo(null);
+    setTemplateId(null);
     setSavedMsg(null);
   };
 
@@ -112,15 +157,71 @@ export default function FormWizard() {
   return (
     <div className="h-full overflow-auto p-8">
       <div className="mx-auto max-w-3xl space-y-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="flex items-center gap-2 text-lg font-semibold">
+              <IconForm className="h-5 w-5 text-indigo-500 dark:text-indigo-400" />
+              Form wizard
+            </h2>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              Design a fillable PDF (AcroForm), share it, then import the filled copies and export
+              every response to Excel — all on your device.
+            </p>
+          </div>
+          <div className="flex rounded-lg border border-slate-300 p-0.5 text-xs dark:border-slate-700">
+            <button
+              onClick={() => setMode('design')}
+              className={`rounded-md px-3 py-1.5 font-medium transition ${
+                mode === 'design'
+                  ? 'bg-indigo-500 text-white'
+                  : 'text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white'
+              }`}
+            >
+              1 · Design
+            </button>
+            <button
+              onClick={() => setMode('responses')}
+              className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium transition ${
+                mode === 'responses'
+                  ? 'bg-indigo-500 text-white'
+                  : 'text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white'
+              }`}
+            >
+              <IconTable className="h-3.5 w-3.5" />
+              2 · Responses → Excel
+            </button>
+          </div>
+        </div>
+
+        {mode === 'responses' ? (
+          <ResponsesView />
+        ) : (
+          <>
+        {/* Templates */}
         <div>
-          <h2 className="flex items-center gap-2 text-lg font-semibold">
-            <IconForm className="h-5 w-5 text-indigo-500 dark:text-indigo-400" />
-            Create a fillable form
-          </h2>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            Design a form with real interactive fields (AcroForm). Anyone can open the PDF, fill
-            it in, and the entered data is saved inside the PDF file itself.
+          <p className="mb-2 text-xs font-semibold tracking-wide text-slate-400 uppercase dark:text-slate-500">
+            Start from a template
           </p>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+            {FORM_TEMPLATES.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => loadTemplate(t)}
+                className={`rounded-xl border p-3 text-left transition ${
+                  templateId === t.id
+                    ? 'border-indigo-400 bg-indigo-500/10 ring-1 ring-indigo-400/60'
+                    : 'border-slate-200 bg-white hover:border-indigo-300 dark:border-slate-800 dark:bg-slate-900/60 dark:hover:border-slate-600'
+                }`}
+                title={`${t.fields.length} fields — ${t.audience}`}
+              >
+                <span className="text-lg">{t.emoji}</span>
+                <span className="mt-1 block text-xs font-semibold leading-tight">{t.name}</span>
+                <span className="mt-0.5 block text-[10px] text-slate-400 dark:text-slate-500">
+                  {t.audience}
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Document settings */}
@@ -172,6 +273,51 @@ export default function FormWizard() {
               <option value="portrait">Portrait</option>
               <option value="landscape">Landscape</option>
             </select>
+          </label>
+
+          {/* Branding: logo + applicant photo box */}
+          <div className="flex items-center gap-3">
+            {logo ? (
+              <span className="flex items-center gap-2 rounded-lg border border-slate-300 px-2 py-1.5 dark:border-slate-700">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={logo.previewUrl} alt="logo" className="h-7 max-w-24 object-contain" />
+                <button
+                  onClick={() => setLogo(null)}
+                  className="rounded p-0.5 text-slate-400 hover:text-red-500"
+                  title="Remove logo"
+                >
+                  <IconX className="h-3.5 w-3.5" />
+                </button>
+              </span>
+            ) : (
+              <button
+                onClick={() => logoInputRef.current?.click()}
+                className="flex items-center gap-1.5 rounded-lg border border-dashed border-slate-400 px-3 py-2 text-xs text-slate-500 transition hover:border-indigo-400 hover:text-indigo-500 dark:border-slate-600 dark:text-slate-400"
+              >
+                <IconImage className="h-4 w-4" />
+                Add organization logo
+              </button>
+            )}
+            <input
+              ref={logoInputRef}
+              type="file"
+              accept="image/png,image/jpeg"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void pickLogo(f);
+                e.target.value = '';
+              }}
+            />
+          </div>
+          <label className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+            <input
+              type="checkbox"
+              checked={photoBox}
+              onChange={(e) => setPhotoBox(e.target.checked)}
+              className="h-4 w-4 accent-indigo-500"
+            />
+            Applicant photo box (35 × 45 mm, top-right)
           </label>
         </div>
 
@@ -325,7 +471,155 @@ export default function FormWizard() {
           </button>
           {savedMsg && <span className="text-sm text-emerald-600 dark:text-emerald-400">{savedMsg}</span>}
         </div>
+          </>
+        )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Step 2 of the flow: collect filled forms back and turn them into a
+ * spreadsheet. Each imported PDF becomes one row; export as .xlsx or .csv.
+ */
+function ResponsesView() {
+  const { dispatch } = usePdfStore();
+  const [rows, setRows] = useState<FormRow[]>([]);
+  const [importing, setImporting] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const importFiles = async (files: FileList) => {
+    setImporting(true);
+    try {
+      for (const file of Array.from(files)) {
+        try {
+          const row = await extractFormData(file.name, new Uint8Array(await file.arrayBuffer()));
+          setRows((rs) => [...rs, row]);
+        } catch (err) {
+          dispatch({
+            type: 'SET_ERROR',
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const columns = collectColumns(rows);
+  const shownCols = columns.slice(0, 5);
+
+  return (
+    <div className="space-y-6">
+      {/* The flow, spelled out */}
+      <ol className="grid gap-2 text-sm text-slate-600 sm:grid-cols-2 dark:text-slate-300">
+        {[
+          ['1', 'Design your form and Save as PDF (previous step).'],
+          ['2', 'Share it — email, WhatsApp, print… People fill it in any PDF viewer and save.'],
+          ['3', 'Drop the filled PDFs below. Each file becomes one row — nothing is uploaded.'],
+          ['4', 'Export to Excel (.xlsx) or CSV and analyse anywhere.'],
+        ].map(([n, text]) => (
+          <li key={n} className="flex gap-2.5 rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900/60">
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-indigo-500 text-[11px] font-bold text-white">
+              {n}
+            </span>
+            {text}
+          </li>
+        ))}
+      </ol>
+
+      <button
+        onClick={() => inputRef.current?.click()}
+        disabled={importing}
+        className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 py-6 text-sm text-slate-500 transition hover:border-indigo-400 hover:text-indigo-500 disabled:opacity-50 dark:border-slate-700 dark:text-slate-400"
+      >
+        {importing ? <IconSpinner className="h-4 w-4" /> : <IconPlus className="h-4 w-4" />}
+        {importing ? 'Reading form data…' : 'Import filled PDF forms (you can pick many at once)'}
+      </button>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="application/pdf,.pdf"
+        multiple
+        className="hidden"
+        onChange={(e) => {
+          if (e.target.files?.length) void importFiles(e.target.files);
+          e.target.value = '';
+        }}
+      />
+
+      {rows.length > 0 && (
+        <>
+          <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-100 text-slate-500 dark:bg-slate-900 dark:text-slate-400">
+                <tr>
+                  <th className="px-3 py-2 font-semibold">File</th>
+                  {shownCols.map((c) => (
+                    <th key={c} className="px-3 py-2 font-semibold">
+                      {c.replaceAll('_', ' ')}
+                    </th>
+                  ))}
+                  {columns.length > shownCols.length && (
+                    <th className="px-3 py-2 font-semibold text-slate-400">
+                      +{columns.length - shownCols.length} more
+                    </th>
+                  )}
+                  <th className="w-8" />
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row, i) => (
+                  <tr key={`${row.file}-${i}`} className="border-t border-slate-200 dark:border-slate-800">
+                    <td className="max-w-40 truncate px-3 py-2 font-medium">{row.file}</td>
+                    {shownCols.map((c) => (
+                      <td key={c} className="max-w-48 truncate px-3 py-2">
+                        {row.values[c] ?? ''}
+                      </td>
+                    ))}
+                    {columns.length > shownCols.length && <td className="px-3 py-2 text-slate-400">…</td>}
+                    <td className="px-2 py-2">
+                      <button
+                        onClick={() => setRows((rs) => rs.filter((_, j) => j !== i))}
+                        className="rounded p-0.5 text-slate-400 hover:text-red-500"
+                        title="Remove row"
+                      >
+                        <IconTrash className="h-3.5 w-3.5" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={() => void exportRowsToXlsx(rows)}
+              className="flex items-center gap-2 rounded-lg bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-emerald-500/25 transition hover:bg-emerald-400"
+            >
+              <IconDownload className="h-4 w-4" />
+              Export to Excel (.xlsx)
+            </button>
+            <button
+              onClick={async () => downloadBytes(await exportRowsToCsv(rows), 'form-responses.csv', 'text/csv')}
+              className="rounded-lg border border-slate-300 px-4 py-2.5 text-sm transition hover:border-emerald-400 dark:border-slate-700"
+            >
+              Export CSV
+            </button>
+            <span className="text-xs text-slate-400 dark:text-slate-500">
+              {rows.length} response{rows.length === 1 ? '' : 's'}, {columns.length} fields
+            </span>
+            <button
+              onClick={() => setRows([])}
+              className="ml-auto rounded-lg px-3 py-2 text-xs text-slate-400 hover:text-red-500"
+            >
+              Clear all
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
