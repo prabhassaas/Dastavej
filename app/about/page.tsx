@@ -94,7 +94,7 @@ export default function AboutPage() {
             Built by
           </p>
           <div className="flex flex-wrap items-center gap-4">
-            <PrabhasSaasLockup className="h-12" />
+            <PrabhasSaasLockup className="h-20" />
             <p className="max-w-sm text-sm text-slate-600 dark:text-slate-300">
               <b>Prabhas SaaS</b> builds small, focused software — practical tools without
               subscriptions, dark patterns, or your data as the product. Dastavej is one of them.

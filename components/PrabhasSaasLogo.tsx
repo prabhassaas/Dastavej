@@ -2,18 +2,22 @@
 
 import { useEffect, useState } from 'react';
 
-const REAL_LOGO_SRC = '/brand/prabhas-saas-logo.png';
+/**
+ * The real Prabhas SaaS lockup (icon + "PRABHAS SaaS" wordmark + tricolor
+ * swoosh, all in one image), uploaded to the repo at this path. Source of
+ * truth lives at brand/prabhas-saas-logo.svg; this is the servable copy
+ * under public/ so Next.js's static export can serve it at the site root.
+ */
+const REAL_LOGO_SRC = '/brand/prabhas-saas-logo.svg';
 
 /**
- * Prabhas SaaS mark. Renders the hand-traced SVG fallback immediately (so
- * there is never a broken-image flash), and silently upgrades to the real
- * logo file if one is present — drop it at `public/brand/prabhas-saas-logo.png`
- * (commit it via the GitHub UI or a push) and it takes over everywhere this
- * component is used, no code change needed. This sandbox has no file access
- * to images pasted in chat (inline chat attachments don't land on disk
- * here), so pixel-exact reproduction isn't possible without that file.
+ * Full Prabhas SaaS lockup. Renders a hand-traced SVG approximation
+ * immediately (so there is never a broken-image flash), and silently
+ * upgrades to the real logo file via a background Image() probe — which
+ * normally resolves in a frame or two since the real file now ships with
+ * the app.
  */
-export function PrabhasSaasMark({ className = 'h-16 w-16' }: { className?: string }) {
+export function PrabhasSaasLockup({ className = 'h-14' }: { className?: string }) {
   const [realLogoReady, setRealLogoReady] = useState(false);
 
   useEffect(() => {
@@ -31,14 +35,19 @@ export function PrabhasSaasMark({ className = 'h-16 w-16' }: { className?: strin
   if (realLogoReady) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
-      <img src={REAL_LOGO_SRC} alt="Prabhas SaaS" className={`${className} object-contain`} />
+      <img src={REAL_LOGO_SRC} alt="Prabhas SaaS" className={`${className} w-auto object-contain`} />
     );
   }
 
-  return <PrabhasSaasMarkFallback className={className} />;
+  return (
+    <span className={`inline-flex items-center gap-2.5 ${className}`}>
+      <PrabhasSaasMarkFallback className="h-full w-auto" />
+      <PrabhasSaasWordmarkFallback className="h-2/3 w-auto" />
+    </span>
+  );
 }
 
-/** Hand-traced approximation of the network/node "flag tower" mark. */
+/** Hand-traced approximation of the network/node "flag tower" mark (fallback only). */
 function PrabhasSaasMarkFallback({ className = 'h-16 w-16' }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 100 100" role="img" aria-label="Prabhas SaaS">
@@ -75,7 +84,7 @@ function PrabhasSaasMarkFallback({ className = 'h-16 w-16' }: { className?: stri
   );
 }
 
-export function PrabhasSaasWordmark({ className = 'h-6' }: { className?: string }) {
+function PrabhasSaasWordmarkFallback({ className = 'h-6' }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 210 46" role="img" aria-label="Prabhas SaaS">
       <text x="0" y="24" fontFamily="Arial, sans-serif" fontWeight="800" fontSize="24" letterSpacing="0.5" fill="#0f2a4a">
@@ -87,14 +96,5 @@ export function PrabhasSaasWordmark({ className = 'h-6' }: { className?: string 
       <path d="M62 34 Q78 28 96 33" stroke="#f2960c" strokeWidth="3" fill="none" strokeLinecap="round" />
       <path d="M62 40 Q78 35 96 39" stroke="#128a3e" strokeWidth="3" fill="none" strokeLinecap="round" />
     </svg>
-  );
-}
-
-export function PrabhasSaasLockup({ className = 'h-14' }: { className?: string }) {
-  return (
-    <span className={`inline-flex items-center gap-2.5 ${className}`}>
-      <PrabhasSaasMark className="h-full w-auto" />
-      <PrabhasSaasWordmark className="h-2/3 w-auto" />
-    </span>
   );
 }

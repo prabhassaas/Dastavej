@@ -16,6 +16,7 @@ mark via `components/Logo.tsx` and `app/icon.svg`.
 | `app-screenshot.png` | Real app screenshot embedded in the poster. |
 | `../app/icon.svg` | Favicon (served by Next.js at `/icon.svg`). |
 | `../app/apple-icon.png` | 180×180 touch icon (rendered from the mark). |
+| `prabhas-saas-logo.svg` | The real Prabhas SaaS lockup (icon + wordmark + tricolor swoosh), supplied by the team and uploaded directly to the repo. Servable copy lives at `../public/brand/prabhas-saas-logo.svg`; used by `components/PrabhasSaasLogo.tsx` on the splash screen and About page. Keep both copies in sync if it's ever replaced. |
 
 ## Palette
 

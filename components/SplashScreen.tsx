@@ -100,7 +100,7 @@ export default function SplashScreen() {
           <span className="text-[10px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">
             Powered by
           </span>
-          <PrabhasSaasLockup className="h-8" />
+          <PrabhasSaasLockup className="h-16" />
         </div>
 
         <MadeInIndia className="text-xs font-medium text-slate-500 dark:text-slate-400" />

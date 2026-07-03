@@ -27,7 +27,7 @@ and every byte of every PDF you open stays on your device.
 | **Print** | One-click printing through the browser dialog; a live date & clock sits in the header and every printed page is stamped with the print date & time. |
 | **Themes** | Light and dark UI with a one-click toggle (defaults to your OS preference). |
 | **OCR** | Pages are rasterized to a canvas and recognized by `tesseract.js`, which runs its WASM engine inside its own **Web Worker**. The worker script, WASM core and English language model are self-hosted static assets — no CDN involved. Extracted text can be copied or downloaded as `.txt`. |
-| **Splash screen** | Dastavej mark, "Powered by Prabhas SaaS" and a Made-in-India note in a 2:1 card on every load. The green progress bar tracks real boot work (web fonts + the pdf.js engine loading), not a fixed timer — it only completes once the app is actually ready. The Prabhas SaaS mark auto-upgrades to a real logo file the moment one exists at `public/brand/prabhas-saas-logo.png`; until then it shows a hand-traced SVG approximation. |
+| **Splash screen** | Dastavej mark, "Powered by Prabhas SaaS" (the real logo, `public/brand/prabhas-saas-logo.svg`) and a Made-in-India note in a 2:1 card on every load. The green progress bar tracks real boot work (web fonts + the pdf.js engine loading), not a fixed timer — it only completes once the app is actually ready. |
 
 ## The form → Excel flow
 
