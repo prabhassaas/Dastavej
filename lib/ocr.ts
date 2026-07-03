@@ -1,4 +1,5 @@
 import { getCachedDoc } from './pdfCache';
+import { getPdfjs } from './pdfjs';
 import type { PageEntry } from './types';
 
 export interface OcrProgress {
@@ -120,6 +121,55 @@ export async function runOcr(
     }
   } finally {
     await worker.terminate();
+  }
+  return results;
+}
+
+/**
+ * OCR a raw PDF's bytes directly — no workspace/store dependency, so this is
+ * the entry point for the public API. Defaults to every page.
+ */
+export async function ocrPdfBytes(
+  bytes: Uint8Array,
+  onProgress: (p: OcrProgress) => void = () => {},
+  options: { enhance?: boolean; pageNumbers?: number[] } = {},
+): Promise<OcrResult[]> {
+  const pdfjs = await getPdfjs();
+  const doc = await pdfjs.getDocument({ data: bytes.slice() }).promise;
+  const pageNumbers = options.pageNumbers ?? Array.from({ length: doc.numPages }, (_, i) => i + 1);
+
+  const { createWorker } = await import('tesseract.js');
+  let current = 0;
+  const worker = await createWorker('eng', 1, {
+    workerPath: '/tesseract/worker.min.js',
+    corePath: '/tesseract/core',
+    langPath: '/tesseract/lang',
+    logger: (m: { status: string; progress: number }) => {
+      if (m.status === 'recognizing text') {
+        onProgress({ pageIndex: current, totalPages: pageNumbers.length, phase: 'recognizing', progress: m.progress });
+      }
+    },
+  });
+
+  const results: OcrResult[] = [];
+  try {
+    for (let i = 0; i < pageNumbers.length; i++) {
+      current = i;
+      onProgress({ pageIndex: i, totalPages: pageNumbers.length, phase: 'render', progress: 0 });
+      const page = await doc.getPage(pageNumbers[i]);
+      const viewport = page.getViewport({ scale: 3.5 });
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.ceil(viewport.width);
+      canvas.height = Math.ceil(viewport.height);
+      await page.render({ canvas, viewport }).promise;
+      if (options.enhance) binarize(canvas);
+      const { data } = await worker.recognize(canvas);
+      results.push({ page: pageNumbers[i], text: data.text.trim() });
+      canvas.width = 0;
+    }
+  } finally {
+    await worker.terminate();
+    await doc.destroy();
   }
   return results;
 }

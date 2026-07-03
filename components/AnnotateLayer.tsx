@@ -5,7 +5,7 @@ import { usePdfStore } from '@/lib/store';
 import { uid, type Annotation, type PageEntry, type ViewportLike } from '@/lib/types';
 import { IconMove, IconX } from './Icons';
 
-export type AnnotTool = 'highlight' | 'box' | 'ink' | 'image' | 'grab';
+export type AnnotTool = 'select' | 'highlight' | 'box' | 'ink' | 'image' | 'grab';
 
 interface Props {
   pageEntry: PageEntry;
@@ -14,6 +14,10 @@ interface Props {
   color: string;
   /** the rendered page canvas — needed by the magic-grab tool */
   canvas?: HTMLCanvasElement | null;
+  selectedIds: Set<string>;
+  onSelectionChange: (ids: Set<string>) => void;
+  /** called right after a magic-grab commits, so the caller can switch to Select */
+  onAfterGrab?: () => void;
 }
 
 /**
@@ -86,12 +90,28 @@ async function grabRegion(
   };
 }
 
+/** Annotation kinds a user can select, move and delete (the erase patch is internal plumbing). */
+function isSelectable(a: Annotation): boolean {
+  return a.kind !== 'erase';
+}
+
 /**
- * Interactive annotation overlay: drag to highlight or box, draw freehand
- * ink, and place/drag/resize image stamps (signatures, logos, photos).
+ * Interactive annotation overlay: drag to highlight/box/draw, place image
+ * stamps, magic-grab objects, and — in the Select tool — click or drag any
+ * existing object directly by its body to move it, multi-select with
+ * Shift-click, or use the toolbar's Select all / Delete selected actions.
  * Geometry is committed in PDF user space so exports match the screen 1:1.
  */
-export default function AnnotateLayer({ pageEntry, viewport, tool, color, canvas }: Props) {
+export default function AnnotateLayer({
+  pageEntry,
+  viewport,
+  tool,
+  color,
+  canvas,
+  selectedIds,
+  onSelectionChange,
+  onAfterGrab,
+}: Props) {
   const { state, dispatch } = usePdfStore();
   const annots = state.annots[pageEntry.id] ?? [];
 
@@ -109,6 +129,11 @@ export default function AnnotateLayer({ pageEntry, viewport, tool, color, canvas
   };
 
   const onPointerDown = (e: React.PointerEvent) => {
+    if (tool === 'select') {
+      // Clicking empty page background clears the current selection.
+      if (e.target === e.currentTarget) onSelectionChange(new Set());
+      return;
+    }
     if (e.target !== e.currentTarget || tool === 'image') return;
     e.currentTarget.setPointerCapture(e.pointerId);
     drawing.current = true;
@@ -140,18 +165,19 @@ export default function AnnotateLayer({ pageEntry, viewport, tool, color, canvas
           const [px0, py1] = toPdf(vx, vy + vh); // bottom-left in PDF space
           const [px1, py0] = toPdf(vx + vw, vy);
           const rect = { x: px0, y: py1, w: px1 - px0, h: py0 - py1 };
+          const imageId = uid();
           // 1) hide the original spot with a background-colored patch…
           dispatch({
             type: 'ADD_ANNOT',
             pageId: pageEntry.id,
             annot: { id: uid(), kind: 'erase', ...rect, color: grabbed.bgHex },
           });
-          // 2) …then float the cutout on top as an editable object
+          // 2) …then float the cutout on top as an editable, selected object.
           dispatch({
             type: 'ADD_ANNOT',
             pageId: pageEntry.id,
             annot: {
-              id: uid(),
+              id: imageId,
               kind: 'image',
               ...rect,
               bytes: grabbed.png,
@@ -159,6 +185,8 @@ export default function AnnotateLayer({ pageEntry, viewport, tool, color, canvas
               previewUrl: grabbed.url,
             },
           });
+          onSelectionChange(new Set([imageId]));
+          onAfterGrab?.();
         }
       }
       setInkDraft([]);
@@ -195,13 +223,20 @@ export default function AnnotateLayer({ pageEntry, viewport, tool, color, canvas
     setInkDraft([]);
   };
 
+  const toggleSelect = (id: string, additive: boolean) => {
+    const next = new Set(additive ? selectedIds : []);
+    if (additive && selectedIds.has(id)) next.delete(id);
+    else next.add(id);
+    onSelectionChange(next);
+  };
+
   return (
     <div
       className="absolute inset-0"
       style={{
         width: viewport.width,
         height: viewport.height,
-        cursor: tool === 'image' ? 'default' : 'crosshair',
+        cursor: tool === 'select' || tool === 'image' ? 'default' : 'crosshair',
         touchAction: 'none',
       }}
       onPointerDown={onPointerDown}
@@ -210,7 +245,15 @@ export default function AnnotateLayer({ pageEntry, viewport, tool, color, canvas
     >
       {/* committed annotations */}
       {annots.map((a) => (
-        <AnnotView key={a.id} annot={a} pageId={pageEntry.id} viewport={viewport} />
+        <AnnotView
+          key={a.id}
+          annot={a}
+          pageId={pageEntry.id}
+          viewport={viewport}
+          selectMode={tool === 'select'}
+          selected={selectedIds.has(a.id)}
+          onToggleSelect={(additive) => toggleSelect(a.id, additive)}
+        />
       ))}
 
       {/* live drafts */}
@@ -253,37 +296,110 @@ export default function AnnotateLayer({ pageEntry, viewport, tool, color, canvas
   );
 }
 
-/** Renders one committed annotation with a hover delete button. */
+/** Shared drag-by-body logic: press anywhere on the shape, drag, commit on release. */
+function useBodyDrag(onCommit: (dx: number, dy: number) => void) {
+  const [offset, setOffset] = useState<{ dx: number; dy: number } | null>(null);
+  const start = useRef<{ x: number; y: number } | null>(null);
+  const moved = useRef(false);
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    e.stopPropagation();
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    start.current = { x: e.clientX, y: e.clientY };
+    moved.current = false;
+    setOffset({ dx: 0, dy: 0 });
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (!start.current) return;
+    const dx = e.clientX - start.current.x;
+    const dy = e.clientY - start.current.y;
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) moved.current = true;
+    setOffset({ dx, dy });
+  };
+  const onPointerUp = (e: React.PointerEvent) => {
+    if (!start.current) return;
+    const dx = e.clientX - start.current.x;
+    const dy = e.clientY - start.current.y;
+    start.current = null;
+    setOffset(null);
+    if (moved.current) onCommit(dx, dy);
+  };
+
+  return { offset, dragged: moved.current, handlers: { onPointerDown, onPointerMove, onPointerUp } };
+}
+
+/** Renders one committed annotation; in Select mode it's draggable-by-body and toggleable. */
 function AnnotView({
   annot,
   pageId,
   viewport,
+  selectMode,
+  selected,
+  onToggleSelect,
 }: {
   annot: Annotation;
   pageId: string;
   viewport: ViewportLike;
+  selectMode: boolean;
+  selected: boolean;
+  onToggleSelect: (additive: boolean) => void;
 }) {
   const { dispatch } = usePdfStore();
   const remove = () => dispatch({ type: 'REMOVE_ANNOT', pageId, id: annot.id });
 
+  const commitMove = (dx: number, dy: number) => {
+    const [x0, y0] = viewport.convertToPdfPoint(0, 0);
+    const [x1, y1] = viewport.convertToPdfPoint(dx, dy);
+    const pdfDx = x1 - x0;
+    const pdfDy = y1 - y0;
+    if (annot.kind === 'ink') {
+      dispatch({
+        type: 'UPDATE_ANNOT',
+        pageId,
+        id: annot.id,
+        patch: { points: annot.points.map(([x, y]) => [x + pdfDx, y + pdfDy]) as [number, number][] },
+      });
+    } else {
+      dispatch({ type: 'UPDATE_ANNOT', pageId, id: annot.id, patch: { x: annot.x + pdfDx, y: annot.y + pdfDy } });
+    }
+  };
+
+  const { offset, dragged, handlers } = useBodyDrag(commitMove);
+  const handleClick = (e: React.MouseEvent) => {
+    if (!selectMode || dragged) return;
+    e.stopPropagation();
+    onToggleSelect(e.shiftKey || e.metaKey || e.ctrlKey);
+  };
+
   if (annot.kind === 'ink') {
     const pts = annot.points.map(([px, py]) => viewport.convertToViewportPoint(px, py));
+    const dx = offset?.dx ?? 0;
+    const dy = offset?.dy ?? 0;
     return (
       <svg
-        className="pointer-events-none absolute inset-0"
+        className="absolute inset-0"
         width={viewport.width}
         height={viewport.height}
+        style={{ pointerEvents: selectMode ? 'auto' : 'none' }}
       >
         <polyline
-          points={pts.map(([x, y]) => `${x},${y}`).join(' ')}
+          points={pts.map(([x, y]) => `${x + dx},${y + dy}`).join(' ')}
           fill="none"
-          stroke={annot.color}
-          strokeWidth={annot.strokeWidth * viewport.scale}
+          stroke={selected ? '#6366f1' : annot.color}
+          strokeWidth={(annot.strokeWidth * viewport.scale) + (selected ? 1.5 : 0)}
           strokeLinecap="round"
           strokeLinejoin="round"
+          strokeDasharray={selected ? '6 3' : undefined}
+          style={{ cursor: selectMode ? 'move' : 'default' }}
+          onPointerDown={selectMode ? handlers.onPointerDown : undefined}
+          onPointerMove={selectMode ? handlers.onPointerMove : undefined}
+          onPointerUp={(e) => {
+            if (selectMode) handlers.onPointerUp(e);
+            handleClick(e as unknown as React.MouseEvent);
+          }}
         />
-        {pts[0] && (
-          <foreignObject x={pts[0][0] - 8} y={pts[0][1] - 20} width="20" height="20">
+        {selected && pts[0] && (
+          <foreignObject x={pts[0][0] + dx - 9} y={pts[0][1] + dy - 22} width="20" height="20">
             <DeleteDot onClick={remove} />
           </foreignObject>
         )}
@@ -295,6 +411,8 @@ function AnnotView({
   const [vx, vyTop] = viewport.convertToViewportPoint(annot.x, annot.y + annot.h);
   const w = annot.w * viewport.scale;
   const h = annot.h * viewport.scale;
+  const left = vx + (offset?.dx ?? 0);
+  const top = vyTop + (offset?.dy ?? 0);
 
   if (annot.kind === 'image') {
     return (
@@ -302,10 +420,15 @@ function AnnotView({
         annot={annot}
         pageId={pageId}
         viewport={viewport}
-        left={vx}
-        top={vyTop}
+        left={left}
+        top={top}
         w={w}
         h={h}
+        selectMode={selectMode}
+        selected={selected}
+        onToggleSelect={onToggleSelect}
+        bodyDrag={handlers}
+        dragged={dragged}
       />
     );
   }
@@ -314,24 +437,39 @@ function AnnotView({
     <div
       className="group absolute"
       style={{
-        left: vx,
-        top: vyTop,
+        left,
+        top,
         width: w,
         height: h,
-        background:
-          annot.kind === 'highlight' || annot.kind === 'erase' ? annot.color : 'transparent',
+        background: annot.kind === 'highlight' ? annot.color : 'transparent',
         opacity: annot.kind === 'highlight' ? 0.35 : 1,
         border: annot.kind === 'box' ? `2px solid ${annot.color}` : undefined,
+        boxShadow: selected ? '0 0 0 2px #6366f1' : undefined,
+        cursor: selectMode ? 'move' : 'default',
+        pointerEvents: selectMode ? 'auto' : 'none',
+      }}
+      onPointerDown={selectMode ? handlers.onPointerDown : undefined}
+      onPointerMove={selectMode ? handlers.onPointerMove : undefined}
+      onPointerUp={(e) => {
+        if (selectMode) handlers.onPointerUp(e);
+        handleClick(e);
       }}
     >
-      <button
-        className="absolute -top-2.5 -right-2.5 hidden rounded-full bg-slate-700 p-0.5 text-white opacity-100 shadow group-hover:block hover:bg-red-500"
-        style={{ opacity: 1 }}
-        title="Delete annotation"
-        onClick={remove}
-      >
-        <IconX className="h-3 w-3" />
-      </button>
+      {(selected || selectMode) && (
+        <button
+          className={`absolute -top-2.5 -right-2.5 rounded-full bg-slate-700 p-0.5 text-white shadow hover:bg-red-500 ${
+            selected ? 'block' : 'hidden group-hover:block'
+          }`}
+          title="Delete annotation"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            remove();
+          }}
+        >
+          <IconX className="h-3 w-3" />
+        </button>
+      )}
     </div>
   );
 }
@@ -341,14 +479,18 @@ function DeleteDot({ onClick }: { onClick: () => void }) {
     <button
       className="pointer-events-auto rounded-full bg-slate-700 p-0.5 text-white shadow hover:bg-red-500"
       title="Delete drawing"
-      onClick={onClick}
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
     >
       <IconX className="h-3 w-3" />
     </button>
   );
 }
 
-/** Image stamp with drag-to-move and a corner resize handle. */
+/** Image stamp: drag its body to move (Select tool), or use the corner handle to resize. */
 function ImageAnnotView({
   annot,
   pageId,
@@ -357,6 +499,11 @@ function ImageAnnotView({
   top,
   w,
   h,
+  selectMode,
+  selected,
+  onToggleSelect,
+  bodyDrag,
+  dragged,
 }: {
   annot: Extract<Annotation, { kind: 'image' }>;
   pageId: string;
@@ -365,36 +512,19 @@ function ImageAnnotView({
   top: number;
   w: number;
   h: number;
+  selectMode: boolean;
+  selected: boolean;
+  onToggleSelect: (additive: boolean) => void;
+  bodyDrag: {
+    onPointerDown: (e: React.PointerEvent) => void;
+    onPointerMove: (e: React.PointerEvent) => void;
+    onPointerUp: (e: React.PointerEvent) => void;
+  };
+  dragged: boolean;
 }) {
   const { dispatch } = usePdfStore();
-  const [offset, setOffset] = useState<{ dx: number; dy: number } | null>(null);
   const [resize, setResize] = useState<{ dw: number } | null>(null);
   const start = useRef<{ x: number; y: number } | null>(null);
-
-  const beginDrag = (e: React.PointerEvent) => {
-    e.preventDefault();
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    start.current = { x: e.clientX, y: e.clientY };
-    setOffset({ dx: 0, dy: 0 });
-  };
-  const moveDrag = (e: React.PointerEvent) => {
-    if (!start.current || !offset) return;
-    setOffset({ dx: e.clientX - start.current.x, dy: e.clientY - start.current.y });
-  };
-  const endDrag = (e: React.PointerEvent) => {
-    if (!start.current || !offset) return;
-    const dx = e.clientX - start.current.x;
-    const dy = e.clientY - start.current.y;
-    start.current = null;
-    setOffset(null);
-    const [px, pyTop] = viewport.convertToPdfPoint(left + dx, top + dy);
-    dispatch({
-      type: 'UPDATE_ANNOT',
-      pageId,
-      id: annot.id,
-      patch: { x: px, y: pyTop - annot.h },
-    });
-  };
 
   const beginResize = (e: React.PointerEvent) => {
     e.preventDefault();
@@ -427,12 +557,23 @@ function ImageAnnotView({
 
   return (
     <div
-      className="group absolute ring-1 ring-indigo-400/60 hover:ring-2"
+      className={`group absolute ${selectMode ? 'ring-1 ring-indigo-400/60 hover:ring-2' : ''}`}
       style={{
-        left: left + (offset?.dx ?? 0),
-        top: top + (offset?.dy ?? 0),
+        left,
+        top,
         width: w * scale,
         height: h * scale,
+        boxShadow: selected ? '0 0 0 2px #6366f1' : undefined,
+        cursor: selectMode ? 'move' : 'default',
+      }}
+      onPointerDown={selectMode ? bodyDrag.onPointerDown : undefined}
+      onPointerMove={selectMode ? bodyDrag.onPointerMove : undefined}
+      onPointerUp={(e) => {
+        if (selectMode) bodyDrag.onPointerUp(e);
+        if (selectMode && !dragged) {
+          e.stopPropagation();
+          onToggleSelect(e.shiftKey || e.metaKey || e.ctrlKey);
+        }
       }}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -442,31 +583,39 @@ function ImageAnnotView({
         className="h-full w-full select-none"
         draggable={false}
       />
-      <div className="absolute -top-3 left-0 hidden -translate-y-full items-center gap-1 rounded-md bg-slate-800 p-1 shadow-lg group-hover:flex">
-        <button
-          className="cursor-move rounded p-0.5 text-slate-300 hover:bg-slate-700"
-          title="Drag to move"
-          onPointerDown={beginDrag}
-          onPointerMove={moveDrag}
-          onPointerUp={endDrag}
+      {selectMode && (
+        <div
+          className={`absolute -top-3 left-0 -translate-y-full items-center gap-1 rounded-md bg-slate-800 p-1 shadow-lg ${
+            selected ? 'flex' : 'hidden group-hover:flex'
+          }`}
         >
-          <IconMove className="h-3.5 w-3.5" />
-        </button>
-        <button
-          className="rounded p-0.5 text-slate-300 hover:bg-red-500/40 hover:text-red-300"
-          title="Delete image"
-          onClick={() => dispatch({ type: 'REMOVE_ANNOT', pageId, id: annot.id })}
-        >
-          <IconX className="h-3.5 w-3.5" />
-        </button>
-      </div>
-      <div
-        className="absolute -right-1.5 -bottom-1.5 hidden h-3.5 w-3.5 cursor-nwse-resize rounded-sm border border-white bg-indigo-500 group-hover:block"
-        title="Drag to resize"
-        onPointerDown={beginResize}
-        onPointerMove={moveResize}
-        onPointerUp={endResize}
-      />
+          <span className="flex items-center gap-0.5 rounded p-0.5 text-slate-400" title="Drag the image itself to move">
+            <IconMove className="h-3.5 w-3.5" />
+          </span>
+          <button
+            className="rounded p-0.5 text-slate-300 hover:bg-red-500/40 hover:text-red-300"
+            title="Delete image"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              dispatch({ type: 'REMOVE_ANNOT', pageId, id: annot.id });
+            }}
+          >
+            <IconX className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+      {selectMode && (
+        <div
+          className={`absolute -right-1.5 -bottom-1.5 h-3.5 w-3.5 cursor-nwse-resize rounded-sm border border-white bg-indigo-500 ${
+            selected ? 'block' : 'hidden group-hover:block'
+          }`}
+          title="Drag to resize"
+          onPointerDown={beginResize}
+          onPointerMove={moveResize}
+          onPointerUp={endResize}
+        />
+      )}
     </div>
   );
 }

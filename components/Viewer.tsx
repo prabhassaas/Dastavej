@@ -7,7 +7,9 @@ import { getCachedDoc } from '@/lib/pdfCache';
 import { ANNOT_COLORS, uid, type ViewportLike } from '@/lib/types';
 import EditLayer from './EditLayer';
 import AnnotateLayer, { type AnnotTool } from './AnnotateLayer';
-import { IconChevronLeft, IconChevronRight, IconRotate, IconSpinner } from './Icons';
+import SignatureLibrary from './SignatureLibrary';
+import TextLayer from './TextLayer';
+import { IconChevronLeft, IconChevronRight, IconRotate, IconSpinner, IconTrash } from './Icons';
 
 const ZOOM_STEPS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3];
 
@@ -15,6 +17,7 @@ export type EditTool = 'select' | 'add-text';
 export type ViewerMode = 'view' | 'edit' | 'annotate';
 
 const ANNOT_TOOLS: { id: AnnotTool; label: string }[] = [
+  { id: 'select', label: 'Select' },
   { id: 'highlight', label: 'Highlight' },
   { id: 'box', label: 'Box' },
   { id: 'ink', label: 'Draw' },
@@ -23,11 +26,13 @@ const ANNOT_TOOLS: { id: AnnotTool; label: string }[] = [
 ];
 
 const ANNOT_HINTS: Record<AnnotTool, string> = {
+  select:
+    'Click any object to select it (Shift-click to add more), drag its body to move it, or use Select all / Delete selected below.',
   highlight: 'Drag across the page to highlight an area. Pick a color on the right.',
   box: 'Drag to draw an outlined box around content.',
   ink: 'Draw freehand with the mouse or a touch pen — great for signatures.',
-  image: 'Upload a signature, stamp or photo, then drag to position and resize it.',
-  grab: 'Drag around a seal, signature or any object to lift it off the page — it becomes a movable, resizable object (background removed, original spot cleaned).',
+  image: 'Choose a premade signature, upload one, or draw your own — then drag to position and resize it.',
+  grab: 'Drag around a seal, signature or any object to lift it off the page — it becomes a selected, movable object (background removed, original spot cleaned).',
 };
 
 /**
@@ -47,12 +52,33 @@ export default function Viewer({ mode }: { mode: ViewerMode }) {
   const [viewport, setViewport] = useState<ViewportLike | null>(null);
   const [rendering, setRendering] = useState(false);
   const [tool, setTool] = useState<EditTool>('select');
-  const [annotTool, setAnnotTool] = useState<AnnotTool>('highlight');
+  const [annotTool, setAnnotTool] = useState<AnnotTool>('select');
   const [annotColor, setAnnotColor] = useState(ANNOT_COLORS.yellow);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [sigOpen, setSigOpen] = useState(false);
+
+  // A fresh page means the previous selection no longer applies to anything visible.
+  useEffect(() => setSelectedIds(new Set()), [entry?.id]);
+
+  /** Place an image (signature/stamp/photo) centered on the current page, then select it. */
+  const placeImageBytes = (bytes: Uint8Array, mime: 'image/png' | 'image/jpeg', previewUrl: string, natural: { w: number; h: number }) => {
+    if (!viewport || !entry) return;
+    const [pw] = viewport.convertToPdfPoint(viewport.width, 0);
+    const w = pw / 3;
+    const h = (w * natural.h) / natural.w;
+    const [cx, cy] = viewport.convertToPdfPoint(viewport.width / 2, viewport.height / 2);
+    const id = uid();
+    dispatch({
+      type: 'ADD_ANNOT',
+      pageId: entry.id,
+      annot: { id, kind: 'image', x: cx - w / 2, y: cy - h / 2, w, h, bytes, mime, previewUrl },
+    });
+    setSelectedIds(new Set([id]));
+    setAnnotTool('select');
+  };
 
   /** Place an uploaded image (signature/stamp/photo) on the current page. */
   const placeImage = async (file: File) => {
-    if (!viewport || !entry) return;
     const mime = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
     if (file.type !== 'image/png' && file.type !== 'image/jpeg') {
       dispatch({ type: 'SET_ERROR', error: 'Please choose a PNG or JPEG image.' });
@@ -66,26 +92,12 @@ export default function Viewer({ mode }: { mode: ViewerMode }) {
       img.onerror = reject;
       img.src = previewUrl;
     });
-    // Place at ~1/3 page width, centered.
-    const [pw] = viewport.convertToPdfPoint(viewport.width, 0);
-    const w = pw / 3;
-    const h = (w * natural.h) / natural.w;
-    const [cx, cy] = viewport.convertToPdfPoint(viewport.width / 2, viewport.height / 2);
-    dispatch({
-      type: 'ADD_ANNOT',
-      pageId: entry.id,
-      annot: {
-        id: uid(),
-        kind: 'image',
-        x: cx - w / 2,
-        y: cy - h / 2,
-        w,
-        h,
-        bytes,
-        mime,
-        previewUrl,
-      },
-    });
+    placeImageBytes(bytes, mime, previewUrl, natural);
+  };
+
+  /** Rasterized presets are already PNGs at a known 400x140 canvas size. */
+  const placePreset = (bytes: Uint8Array, previewUrl: string) => {
+    placeImageBytes(bytes, 'image/png', previewUrl, { w: 400, h: 140 });
   };
 
   useEffect(() => {
@@ -235,35 +247,79 @@ export default function Viewer({ mode }: { mode: ViewerMode }) {
             <div className="mx-3 h-6 w-px bg-slate-200 dark:bg-slate-700" />
             <div className="flex rounded-lg border border-slate-300 p-0.5 text-xs dark:border-slate-700">
               {ANNOT_TOOLS.map((t) => (
+                <div key={t.id} className="relative">
+                  <button
+                    onClick={() => {
+                      setAnnotTool(t.id);
+                      if (t.id === 'image') setSigOpen((v) => !v);
+                      else setSigOpen(false);
+                    }}
+                    className={`rounded-md px-3 py-1 font-medium transition ${
+                      annotTool === t.id
+                        ? 'bg-indigo-500 text-white'
+                        : 'text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white'
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                  {t.id === 'image' && sigOpen && (
+                    <SignatureLibrary
+                      onPickPreset={placePreset}
+                      onUpload={(f) => void placeImage(f)}
+                      onDraw={() => setAnnotTool('ink')}
+                      onClose={() => setSigOpen(false)}
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+            {(annotTool === 'highlight' || annotTool === 'box' || annotTool === 'ink') && (
+              <div className="ml-2 flex items-center gap-1.5">
+                {Object.entries(ANNOT_COLORS).map(([name, hex]) => (
+                  <button
+                    key={name}
+                    onClick={() => setAnnotColor(hex)}
+                    className={`h-5 w-5 rounded-full border-2 transition ${
+                      annotColor === hex ? 'scale-110 border-slate-900 dark:border-white' : 'border-transparent'
+                    }`}
+                    style={{ background: hex }}
+                    title={name}
+                  />
+                ))}
+              </div>
+            )}
+            {annotTool === 'select' && (
+              <div className="ml-2 flex items-center gap-1.5">
                 <button
-                  key={t.id}
-                  onClick={() => {
-                    setAnnotTool(t.id);
-                    if (t.id === 'image') imageInputRef.current?.click();
-                  }}
-                  className={`rounded-md px-3 py-1 font-medium transition ${
-                    annotTool === t.id
-                      ? 'bg-indigo-500 text-white'
-                      : 'text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white'
-                  }`}
+                  onClick={() =>
+                    setSelectedIds(new Set((state.annots[entry.id] ?? []).filter((a) => a.kind !== 'erase').map((a) => a.id)))
+                  }
+                  className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs text-slate-500 hover:text-slate-900 dark:border-slate-700 dark:text-slate-300 dark:hover:text-white"
                 >
-                  {t.label}
+                  Select all
                 </button>
-              ))}
-            </div>
-            <div className="ml-2 flex items-center gap-1.5">
-              {Object.entries(ANNOT_COLORS).map(([name, hex]) => (
-                <button
-                  key={name}
-                  onClick={() => setAnnotColor(hex)}
-                  className={`h-5 w-5 rounded-full border-2 transition ${
-                    annotColor === hex ? 'scale-110 border-slate-900 dark:border-white' : 'border-transparent'
-                  }`}
-                  style={{ background: hex }}
-                  title={name}
-                />
-              ))}
-            </div>
+                {selectedIds.size > 0 && (
+                  <>
+                    <button
+                      onClick={() => setSelectedIds(new Set())}
+                      className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs text-slate-500 hover:text-slate-900 dark:border-slate-700 dark:text-slate-300 dark:hover:text-white"
+                    >
+                      Clear ({selectedIds.size})
+                    </button>
+                    <button
+                      onClick={() => {
+                        for (const id of selectedIds) dispatch({ type: 'REMOVE_ANNOT', pageId: entry.id, id });
+                        setSelectedIds(new Set());
+                      }}
+                      className="flex items-center gap-1 rounded-lg border border-red-300 px-2.5 py-1 text-xs text-red-500 hover:bg-red-50 dark:border-red-500/40 dark:text-red-300 dark:hover:bg-red-500/10"
+                    >
+                      <IconTrash className="h-3 w-3" />
+                      Delete selected
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
             <input
               ref={imageInputRef}
               type="file"
@@ -298,6 +354,7 @@ export default function Viewer({ mode }: { mode: ViewerMode }) {
         <div className="mx-auto w-fit">
           <div className="relative shadow-2xl shadow-slate-400/50 dark:shadow-black/60">
             <canvas ref={canvasRef} className="block rounded-sm bg-white" />
+            {mode === 'view' && page && viewport && <TextLayer page={page} viewport={viewport} />}
             {editMode && page && viewport && (
               <EditLayer key={`${entry.id}-${state.zoom}`} pageEntry={entry} page={page} viewport={viewport} tool={tool} />
             )}
@@ -309,6 +366,9 @@ export default function Viewer({ mode }: { mode: ViewerMode }) {
                 tool={annotTool}
                 color={annotColor}
                 canvas={canvasRef.current}
+                selectedIds={selectedIds}
+                onSelectionChange={setSelectedIds}
+                onAfterGrab={() => setAnnotTool('select')}
               />
             )}
             {/* live preview of document marks (watermark + header/footer) */}

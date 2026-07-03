@@ -4,7 +4,16 @@ import { useEffect, useRef, useState } from 'react';
 import type { PDFPageProxy } from 'pdfjs-dist';
 import { getPdfjs } from '@/lib/pdfjs';
 import { usePdfStore } from '@/lib/store';
-import { uid, type AddedText, type PageEntry, type ViewportLike } from '@/lib/types';
+import { cssFontStack, detectFontStyle } from '@/lib/fontDetect';
+import {
+  uid,
+  type AddedText,
+  type FontFamily,
+  type PageEntry,
+  type TextEdit,
+  type TextStyle,
+  type ViewportLike,
+} from '@/lib/types';
 import type { EditTool } from './Viewer';
 import { IconMove, IconX } from './Icons';
 
@@ -21,6 +30,7 @@ interface DisplayItem {
   pdfY: number;
   pdfWidth: number;
   pdfSize: number;
+  detected: { fontFamily: FontFamily; bold: boolean; italic: boolean; label: string };
 }
 
 interface Props {
@@ -45,7 +55,8 @@ export default function EditLayer({ pageEntry, page, viewport, tool }: Props) {
   const textEdits = pageEdits?.textEdits ?? {};
   const added = pageEdits?.added ?? [];
 
-  // Project every text item of the page into viewport coordinates.
+  // Project every text item of the page into viewport coordinates, and
+  // recognize the closest standard font from pdf.js's resolved font info.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -59,6 +70,7 @@ export default function EditLayer({ pageEntry, page, viewport, tool }: Props) {
         const tr = pdfjs.Util.transform(viewport.transform, item.transform);
         const fontPx = Math.hypot(tr[2], tr[3]) || 12 * viewport.scale;
         const pdfSize = Math.hypot(item.transform[2], item.transform[3]) || item.height || 12;
+        const styleInfo = 'fontName' in item ? content.styles[item.fontName] : undefined;
         out.push({
           index,
           str: item.str,
@@ -71,6 +83,7 @@ export default function EditLayer({ pageEntry, page, viewport, tool }: Props) {
           pdfY: item.transform[5],
           pdfWidth: item.width,
           pdfSize,
+          detected: detectFontStyle(styleInfo?.fontFamily),
         });
       });
       if (!cancelled) setItems(out);
@@ -92,6 +105,11 @@ export default function EditLayer({ pageEntry, page, viewport, tool }: Props) {
         pdfY: item.pdfY,
         pdfWidth: item.pdfWidth,
         pdfSize: item.pdfSize,
+        fontFamily: item.detected.fontFamily,
+        bold: item.detected.bold,
+        italic: item.detected.italic,
+        underline: false,
+        detectedFont: item.detected.label,
       },
     });
   };
@@ -103,7 +121,17 @@ export default function EditLayer({ pageEntry, page, viewport, tool }: Props) {
     dispatch({
       type: 'ADD_TEXT',
       pageId: pageEntry.id,
-      added: { id: uid(), text: 'New text', pdfX, pdfY, pdfSize: 14 },
+      added: {
+        id: uid(),
+        text: 'New text',
+        pdfX,
+        pdfY,
+        pdfSize: 14,
+        fontFamily: 'Helvetica',
+        bold: false,
+        italic: false,
+        underline: false,
+      },
     });
   };
 
@@ -120,45 +148,22 @@ export default function EditLayer({ pageEntry, page, viewport, tool }: Props) {
           const edit = textEdits[item.index];
           if (edit) {
             return (
-              <div
+              <EditedTextBlock
                 key={item.index}
-                className="group absolute"
-                style={{ left: item.left, top: item.top, minWidth: item.width }}
-              >
-                <textarea
-                  className="pdf-overlay-textarea block rounded-sm bg-white text-black ring-2 ring-indigo-500 outline-none"
-                  style={{
-                    fontSize: item.fontPx,
-                    lineHeight: 1.25,
-                    width: Math.max(item.width + 8, 60),
-                    height: item.height + 6,
-                    fontFamily: 'Helvetica, Arial, sans-serif',
-                    padding: '0 2px',
-                  }}
-                  value={edit.text}
-                  autoFocus
-                  onChange={(e) =>
-                    dispatch({
-                      type: 'UPSERT_TEXT_EDIT',
-                      pageId: pageEntry.id,
-                      edit: { ...edit, text: e.target.value },
-                    })
-                  }
-                />
-                <button
-                  className="absolute -top-2.5 -right-2.5 hidden rounded-full bg-slate-600 p-0.5 text-white shadow group-hover:block hover:bg-red-500 dark:bg-slate-700"
-                  title="Revert this edit"
-                  onClick={() =>
-                    dispatch({
-                      type: 'REMOVE_TEXT_EDIT',
-                      pageId: pageEntry.id,
-                      itemIndex: item.index,
-                    })
-                  }
-                >
-                  <IconX className="h-3 w-3" />
-                </button>
-              </div>
+                item={item}
+                edit={edit}
+                pageId={pageEntry.id}
+                onChange={(patch) =>
+                  dispatch({
+                    type: 'UPSERT_TEXT_EDIT',
+                    pageId: pageEntry.id,
+                    edit: { ...edit, ...patch },
+                  })
+                }
+                onRevert={() =>
+                  dispatch({ type: 'REMOVE_TEXT_EDIT', pageId: pageEntry.id, itemIndex: item.index })
+                }
+              />
             );
           }
           return (
@@ -166,7 +171,7 @@ export default function EditLayer({ pageEntry, page, viewport, tool }: Props) {
               key={item.index}
               className="absolute cursor-text rounded-sm ring-indigo-400/0 transition hover:bg-indigo-400/10 hover:ring-1 hover:ring-indigo-400/70"
               style={{ left: item.left, top: item.top, width: item.width, height: item.height }}
-              title="Click to edit this text"
+              title={`Click to edit this text — detected font: ${item.detected.label}`}
               onClick={() => startEdit(item)}
             />
           );
@@ -176,6 +181,118 @@ export default function EditLayer({ pageEntry, page, viewport, tool }: Props) {
       {added.map((box) => (
         <AddedTextBox key={box.id} box={box} pageId={pageEntry.id} viewport={viewport} />
       ))}
+    </div>
+  );
+}
+
+/** Small toolbar: font family, size, bold/italic/underline — shared by both text overlays. */
+function FormatToolbar({
+  style,
+  size,
+  detectedLabel,
+  onChange,
+}: {
+  style: TextStyle;
+  size: number;
+  detectedLabel?: string;
+  onChange: (patch: Partial<TextStyle> & { pdfSize?: number }) => void;
+}) {
+  const btnCls = (active: boolean) =>
+    `rounded px-1.5 py-0.5 text-xs font-bold transition ${
+      active
+        ? 'bg-indigo-500 text-white'
+        : 'text-slate-500 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700'
+    }`;
+  return (
+    <div className="flex items-center gap-1 rounded-md border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-800">
+      <select
+        value={style.fontFamily}
+        onChange={(e) => onChange({ fontFamily: e.target.value as FontFamily })}
+        title={detectedLabel ? `Detected: ${detectedLabel}` : 'Font family'}
+        className="rounded border border-slate-300 bg-white px-1 py-0.5 text-[11px] text-slate-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
+      >
+        <option value="Helvetica">Sans (Helvetica)</option>
+        <option value="Times">Serif (Times)</option>
+        <option value="Courier">Mono (Courier)</option>
+      </select>
+      <input
+        type="number"
+        min={6}
+        max={96}
+        value={Math.round(size)}
+        onChange={(e) => onChange({ pdfSize: Number(e.target.value) || 12 })}
+        title="Font size (pt)"
+        className="w-11 rounded border border-slate-300 bg-white px-1 py-0.5 text-[11px] text-slate-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
+      />
+      <button className={btnCls(style.bold)} title="Bold" onClick={() => onChange({ bold: !style.bold })}>
+        B
+      </button>
+      <button
+        className={`${btnCls(style.italic)} italic`}
+        title="Italic"
+        onClick={() => onChange({ italic: !style.italic })}
+      >
+        I
+      </button>
+      <button
+        className={`${btnCls(style.underline)} underline`}
+        title="Underline"
+        onClick={() => onChange({ underline: !style.underline })}
+      >
+        U
+      </button>
+    </div>
+  );
+}
+
+function EditedTextBlock({
+  item,
+  edit,
+  onChange,
+  onRevert,
+}: {
+  item: DisplayItem;
+  edit: TextEdit;
+  pageId: string;
+  onChange: (patch: Partial<TextEdit>) => void;
+  onRevert: () => void;
+}) {
+  const scale = item.fontPx / item.pdfSize;
+  const fontPx = edit.pdfSize * scale;
+  return (
+    <div className="group absolute z-10" style={{ left: item.left, top: item.top, minWidth: item.width }}>
+      <div className="absolute -top-2 left-0 hidden -translate-y-full group-focus-within:block">
+        <FormatToolbar
+          style={edit}
+          size={edit.pdfSize}
+          detectedLabel={edit.detectedFont}
+          onChange={(patch) => onChange(patch)}
+        />
+      </div>
+      <textarea
+        className="pdf-overlay-textarea block rounded-sm bg-white text-black ring-2 ring-indigo-500 outline-none"
+        style={{
+          fontSize: fontPx,
+          lineHeight: 1.25,
+          width: Math.max(item.width + 8, 60),
+          height: item.height + 6,
+          fontFamily: cssFontStack(edit.fontFamily),
+          fontWeight: edit.bold ? 700 : 400,
+          fontStyle: edit.italic ? 'italic' : 'normal',
+          textDecoration: edit.underline ? 'underline' : 'none',
+          padding: '0 2px',
+        }}
+        value={edit.text}
+        autoFocus
+        onChange={(e) => onChange({ text: e.target.value })}
+      />
+      <button
+        className="absolute -top-2.5 -right-2.5 hidden rounded-full bg-slate-600 p-0.5 text-white shadow group-hover:block hover:bg-red-500 dark:bg-slate-700"
+        title="Revert this edit"
+        onClick={onRevert}
+      >
+        <IconX className="h-3 w-3" />
+      </button>
     </div>
   );
 }
@@ -220,26 +337,14 @@ function AddedTextBox({
     dispatch({ type: 'UPDATE_ADDED', pageId, id: box.id, patch: { pdfX, pdfY } });
   };
 
+  const patch = (p: Partial<AddedText>) => dispatch({ type: 'UPDATE_ADDED', pageId, id: box.id, patch: p });
+
   return (
-    <div className="group absolute" style={{ left, top }} onClick={(e) => e.stopPropagation()}>
-      <textarea
-        className="pdf-overlay-textarea block min-h-0 rounded-sm bg-transparent text-black ring-1 ring-emerald-500/70 outline-none focus:bg-white/80 focus:ring-2"
-        style={{
-          fontSize: fontPx,
-          lineHeight: 1.2,
-          width: Math.max(fontPx * 0.62 * Math.max(...box.text.split('\n').map((l) => l.length), 4) + 12, 60),
-          height: fontPx * 1.2 * box.text.split('\n').length + 8,
-          fontFamily: 'Helvetica, Arial, sans-serif',
-          padding: '0 2px',
-        }}
-        value={box.text}
-        onChange={(e) =>
-          dispatch({ type: 'UPDATE_ADDED', pageId, id: box.id, patch: { text: e.target.value } })
-        }
-      />
-      <div className="absolute -top-3 left-0 hidden -translate-y-full items-center gap-1 rounded-md border border-slate-200 bg-white p-1 shadow-lg group-focus-within:flex group-hover:flex dark:border-slate-700 dark:bg-slate-800">
+    <div className="group absolute z-10" style={{ left, top }} onClick={(e) => e.stopPropagation()}>
+      <div className="absolute -top-2 left-0 hidden -translate-y-full items-end gap-1 group-focus-within:flex group-hover:flex">
+        <FormatToolbar style={box} size={box.pdfSize} onChange={(p) => patch(p)} />
         <button
-          className="cursor-move rounded p-0.5 text-slate-500 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700"
+          className="cursor-move rounded border border-slate-200 bg-white p-1.5 text-slate-500 shadow-lg hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
           title="Drag to move"
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
@@ -247,30 +352,30 @@ function AddedTextBox({
         >
           <IconMove className="h-3.5 w-3.5" />
         </button>
-        <input
-          type="number"
-          min={6}
-          max={96}
-          value={Math.round(box.pdfSize)}
-          onChange={(e) =>
-            dispatch({
-              type: 'UPDATE_ADDED',
-              pageId,
-              id: box.id,
-              patch: { pdfSize: Number(e.target.value) || 14 },
-            })
-          }
-          className="w-12 rounded border border-slate-300 bg-white px-1 py-0.5 text-xs text-slate-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
-          title="Font size (pt)"
-        />
         <button
-          className="rounded p-0.5 text-slate-500 hover:bg-red-500/20 hover:text-red-500 dark:text-slate-300 dark:hover:text-red-300"
+          className="rounded border border-slate-200 bg-white p-1.5 text-slate-500 shadow-lg hover:bg-red-500/20 hover:text-red-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:text-red-300"
           title="Delete text box"
           onClick={() => dispatch({ type: 'REMOVE_ADDED', pageId, id: box.id })}
         >
           <IconX className="h-3.5 w-3.5" />
         </button>
       </div>
+      <textarea
+        className="pdf-overlay-textarea block min-h-0 rounded-sm bg-transparent text-black ring-1 ring-emerald-500/70 outline-none focus:bg-white/80 focus:ring-2"
+        style={{
+          fontSize: fontPx,
+          lineHeight: 1.2,
+          width: Math.max(fontPx * 0.62 * Math.max(...box.text.split('\n').map((l) => l.length), 4) + 12, 60),
+          height: fontPx * 1.2 * box.text.split('\n').length + 8,
+          fontFamily: cssFontStack(box.fontFamily),
+          fontWeight: box.bold ? 700 : 400,
+          fontStyle: box.italic ? 'italic' : 'normal',
+          textDecoration: box.underline ? 'underline' : 'none',
+          padding: '0 2px',
+        }}
+        value={box.text}
+        onChange={(e) => patch({ text: e.target.value })}
+      />
     </div>
   );
 }

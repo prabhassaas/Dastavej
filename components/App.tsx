@@ -15,6 +15,7 @@ import MarksPanel from './MarksPanel';
 import OcrPanel from './OcrPanel';
 import AiPanel from './AiPanel';
 import ErrorToast from './ErrorToast';
+import SplashScreen from './SplashScreen';
 import { LogoMark } from './Logo';
 import {
   IconConvert,
@@ -32,7 +33,14 @@ import {
   IconSun,
 } from './Icons';
 
-const TABS: { id: Tab; label: string; icon: React.ReactNode; needsDoc: boolean }[] = [
+const TABS: {
+  id: Tab;
+  label: string;
+  icon: React.ReactNode;
+  needsDoc: boolean;
+  disabled?: boolean;
+  disabledReason?: string;
+}[] = [
   { id: 'view', label: 'View', icon: <IconEye className="h-4 w-4" />, needsDoc: true },
   { id: 'organize', label: 'Organize', icon: <IconGrid className="h-4 w-4" />, needsDoc: true },
   { id: 'edit', label: 'Edit', icon: <IconPencil className="h-4 w-4" />, needsDoc: true },
@@ -40,7 +48,15 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode; needsDoc: boolean }
   { id: 'marks', label: 'Watermark', icon: <IconDroplet className="h-4 w-4" />, needsDoc: true },
   { id: 'convert', label: 'Convert', icon: <IconConvert className="h-4 w-4" />, needsDoc: true },
   { id: 'form', label: 'Forms', icon: <IconForm className="h-4 w-4" />, needsDoc: false },
-  { id: 'ai', label: 'AI', icon: <IconSparkle className="h-4 w-4" />, needsDoc: false },
+  {
+    id: 'ai',
+    label: 'AI',
+    icon: <IconSparkle className="h-4 w-4" />,
+    needsDoc: false,
+    disabled: true,
+    disabledReason:
+      'AI features are paused while we build local, on-device AI support — coming soon.',
+  },
   { id: 'compress', label: 'Compress', icon: <IconShrink className="h-4 w-4" />, needsDoc: true },
   { id: 'ocr', label: 'OCR', icon: <IconScan className="h-4 w-4" />, needsDoc: true },
 ];
@@ -62,12 +78,13 @@ function Workspace() {
         <div className="mx-2 flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto">
           {TABS.map((tab) => {
             const active = state.tab === tab.id;
-            const disabled = tab.needsDoc && !hasDocument;
+            const disabled = tab.disabled || (tab.needsDoc && !hasDocument);
             return (
               <button
                 key={tab.id}
                 onClick={() => dispatch({ type: 'SET_TAB', tab: tab.id })}
                 disabled={disabled}
+                title={tab.disabledReason}
                 className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-[13px] font-medium transition
                   ${
                     active
@@ -78,6 +95,11 @@ function Workspace() {
               >
                 {tab.icon}
                 {tab.label}
+                {tab.disabled && (
+                  <span className="rounded-full bg-slate-200 px-1.5 py-0.5 text-[9px] font-semibold text-slate-500 dark:bg-slate-700 dark:text-slate-300">
+                    soon
+                  </span>
+                )}
               </button>
             );
           })}
@@ -90,6 +112,12 @@ function Workspace() {
           <IconShield className="h-4 w-4 text-emerald-500 dark:text-emerald-400" />
           100% local
         </span>
+        <Link
+          href="/developers"
+          className="hidden rounded-lg px-2.5 py-1.5 text-[13px] font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 sm:block dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+        >
+          Developers
+        </Link>
         <Link
           href="/about"
           className="rounded-lg px-2.5 py-1.5 text-[13px] font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
@@ -131,6 +159,15 @@ function Workspace() {
         </main>
       </div>
 
+      <footer className="shrink-0 border-t border-slate-200 bg-white px-4 py-1.5 text-center text-[10px] leading-snug text-slate-400 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-500">
+        Dastavej is provided as-is for lawful use only. Any use for fraudulent, deceptive,
+        infringing, or otherwise illegal purposes is solely the user&apos;s responsibility and
+        discretion — the creators accept no liability for misuse.{' '}
+        <Link href="/about#disclaimer" className="underline hover:text-indigo-500">
+          Full disclaimer
+        </Link>
+      </footer>
+
       <ErrorToast />
     </div>
   );
@@ -140,6 +177,7 @@ export default function App() {
   return (
     <ThemeProvider>
       <PdfProvider>
+        <SplashScreen />
         <Workspace />
       </PdfProvider>
     </ThemeProvider>

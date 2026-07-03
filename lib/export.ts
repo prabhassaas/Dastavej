@@ -1,5 +1,5 @@
 import { PDFDocument, StandardFonts, degrees, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
-import type { Annotation, DocMarks, PageEdits, PageEntry, SourceFile } from './types';
+import type { Annotation, DocMarks, FontFamily, PageEdits, PageEntry, SourceFile } from './types';
 
 export interface AssembleExtras {
   annots?: Record<string, Annotation[]>;
@@ -17,6 +17,72 @@ function hexToRgb(hex: string) {
   return rgb(((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255);
 }
 
+const FONT_VARIANTS: Record<FontFamily, [StandardFonts, StandardFonts, StandardFonts, StandardFonts]> = {
+  // [regular, bold, italic, bold+italic]
+  Helvetica: [
+    StandardFonts.Helvetica,
+    StandardFonts.HelveticaBold,
+    StandardFonts.HelveticaOblique,
+    StandardFonts.HelveticaBoldOblique,
+  ],
+  Times: [
+    StandardFonts.TimesRoman,
+    StandardFonts.TimesRomanBold,
+    StandardFonts.TimesRomanItalic,
+    StandardFonts.TimesRomanBoldItalic,
+  ],
+  Courier: [
+    StandardFonts.Courier,
+    StandardFonts.CourierBold,
+    StandardFonts.CourierOblique,
+    StandardFonts.CourierBoldOblique,
+  ],
+};
+
+/** Lazily embeds and caches the 12 standard-font variants actually used in a document. */
+class FontPicker {
+  private cache = new Map<string, PDFFont>();
+  constructor(private doc: PDFDocument) {}
+  async get(family: FontFamily, bold: boolean, italic: boolean): Promise<PDFFont> {
+    const key = `${family}-${bold ? 1 : 0}-${italic ? 1 : 0}`;
+    const cached = this.cache.get(key);
+    if (cached) return cached;
+    const index = (bold ? 1 : 0) | (italic ? 2 : 0);
+    const variant = FONT_VARIANTS[family][index];
+    const embedded = await this.doc.embedFont(variant);
+    this.cache.set(key, embedded);
+    return embedded;
+  }
+}
+
+/** Draws left-aligned text (optionally multi-line, optionally underlined) at a baseline. */
+function drawStyledText(
+  page: PDFPage,
+  text: string,
+  x: number,
+  y: number,
+  size: number,
+  font: PDFFont,
+  underline: boolean,
+) {
+  let ly = y;
+  for (const line of text.split('\n')) {
+    if (line) {
+      page.drawText(line, { x, y: ly, size, font, color: rgb(0, 0, 0) });
+      if (underline) {
+        const lw = font.widthOfTextAtSize(line, size);
+        page.drawLine({
+          start: { x, y: ly - size * 0.12 },
+          end: { x: x + lw, y: ly - size * 0.12 },
+          thickness: Math.max(0.6, size * 0.045),
+          color: rgb(0, 0, 0),
+        });
+      }
+    }
+    ly -= size * 1.2;
+  }
+}
+
 /**
  * Assemble the working document entirely in the browser with pdf-lib:
  * pages are copied from their source files in the user's order (which also
@@ -31,6 +97,7 @@ export async function assemblePdf(
 ): Promise<Uint8Array> {
   const out = await PDFDocument.create();
   const font = await out.embedFont(StandardFonts.Helvetica);
+  const fonts = new FontPicker(out);
 
   const srcDocs = new Map<string, PDFDocument>();
   for (const entry of pages) {
@@ -61,27 +128,15 @@ export async function assemblePdf(
           color: rgb(1, 1, 1),
         });
         if (edit.text.trim()) {
-          page.drawText(toWinAnsi(edit.text), {
-            x: edit.pdfX,
-            y: edit.pdfY,
-            size: edit.pdfSize,
-            font,
-            color: rgb(0, 0, 0),
-            lineHeight: edit.pdfSize * 1.2,
-          });
+          const f = await fonts.get(edit.fontFamily, edit.bold, edit.italic);
+          drawStyledText(page, toWinAnsi(edit.text), edit.pdfX, edit.pdfY, edit.pdfSize, f, edit.underline);
         }
       }
 
       for (const added of pageEdits.added) {
         if (!added.text.trim()) continue;
-        page.drawText(toWinAnsi(added.text), {
-          x: added.pdfX,
-          y: added.pdfY,
-          size: added.pdfSize,
-          font,
-          color: rgb(0, 0, 0),
-          lineHeight: added.pdfSize * 1.2,
-        });
+        const f = await fonts.get(added.fontFamily, added.bold, added.italic);
+        drawStyledText(page, toWinAnsi(added.text), added.pdfX, added.pdfY, added.pdfSize, f, added.underline);
       }
     }
 

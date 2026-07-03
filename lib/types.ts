@@ -88,12 +88,30 @@ export interface PageEntry {
   rotation: number;
 }
 
+/** One of the 14 standard PDF fonts' base families — always embeddable, no font files needed. */
+export type FontFamily = 'Helvetica' | 'Times' | 'Courier';
+
+/** Text formatting shared by edited and newly-added text. */
+export interface TextStyle {
+  fontFamily: FontFamily;
+  bold: boolean;
+  italic: boolean;
+  underline: boolean;
+}
+
+export const DEFAULT_TEXT_STYLE: TextStyle = {
+  fontFamily: 'Helvetica',
+  bold: false,
+  italic: false,
+  underline: false,
+};
+
 /**
  * An edit of an existing text block. Coordinates are in PDF user space
  * (origin bottom-left, y = text baseline), captured from pdf.js text items,
  * so they can be replayed 1:1 with pdf-lib on export.
  */
-export interface TextEdit {
+export interface TextEdit extends TextStyle {
   /** index of the text item in pdf.js getTextContent().items */
   itemIndex: number;
   original: string;
@@ -102,10 +120,12 @@ export interface TextEdit {
   pdfY: number;
   pdfWidth: number;
   pdfSize: number;
+  /** best-guess description of the original font, shown as a hint (e.g. "Times-like, bold") */
+  detectedFont?: string;
 }
 
 /** A brand-new text box placed by the user. PDF user space, y = baseline. */
-export interface AddedText {
+export interface AddedText extends TextStyle {
   id: string;
   text: string;
   pdfX: number;

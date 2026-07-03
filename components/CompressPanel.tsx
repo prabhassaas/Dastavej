@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { usePdfStore } from '@/lib/store';
 import { assemblePdf } from '@/lib/export';
+import { compressPdf } from '@/lib/compress';
 import { downloadBytes, formatBytes } from '@/lib/download';
-import type { CompressResponse } from '@/workers/compress.worker';
 import { IconDownload, IconShrink, IconSpinner } from './Icons';
 
 interface Result {
@@ -15,10 +15,10 @@ interface Result {
 }
 
 /**
- * Runs image recompression in a dedicated Web Worker: embedded JPEGs are
- * decoded, downsampled on an OffscreenCanvas, re-encoded at the chosen
- * quality and swapped back into the PDF with pdf-lib. The UI thread never
- * touches the heavy work.
+ * Runs image recompression in a dedicated Web Worker (via lib/compress.ts):
+ * embedded JPEGs are decoded, downsampled on an OffscreenCanvas, re-encoded
+ * at the chosen quality and swapped back into the PDF with pdf-lib. The UI
+ * thread never touches the heavy work.
  */
 export default function CompressPanel() {
   const { state, dispatch, replaceWorkspace } = usePdfStore();
@@ -27,9 +27,6 @@ export default function CompressPanel() {
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
   const [result, setResult] = useState<Result | null>(null);
-  const workerRef = useRef<Worker | null>(null);
-
-  useEffect(() => () => workerRef.current?.terminate(), []);
 
   const run = async () => {
     setRunning(true);
@@ -41,32 +38,14 @@ export default function CompressPanel() {
       const assembled = await assemblePdf(state.sources, state.pages, state.edits, { annots: state.annots, marks: state.marks });
       const originalSize = assembled.byteLength;
 
-      const worker = new Worker(new URL('../workers/compress.worker.ts', import.meta.url), {
-        type: 'module',
+      const done = await compressPdf(assembled, {
+        quality,
+        maxDimension,
+        onProgress: (current, total) => setProgress({ current, total }),
       });
-      workerRef.current = worker;
-
-      const done = await new Promise<Extract<CompressResponse, { type: 'done' }>>(
-        (resolve, reject) => {
-          worker.onmessage = (e: MessageEvent<CompressResponse>) => {
-            const msg = e.data;
-            if (msg.type === 'progress') setProgress({ current: msg.current, total: msg.total });
-            else if (msg.type === 'done') resolve(msg);
-            else reject(new Error(msg.message));
-          };
-          worker.onerror = (e) => reject(new Error(e.message || 'Worker crashed'));
-          const buffer = assembled.buffer.slice(
-            assembled.byteOffset,
-            assembled.byteOffset + assembled.byteLength,
-          ) as ArrayBuffer;
-          worker.postMessage({ bytes: buffer, quality, maxDimension }, [buffer]);
-        },
-      );
-      worker.terminate();
-      workerRef.current = null;
 
       setResult({
-        bytes: new Uint8Array(done.bytes),
+        bytes: done.bytes,
         originalSize,
         imagesFound: done.imagesFound,
         imagesRecompressed: done.imagesRecompressed,
