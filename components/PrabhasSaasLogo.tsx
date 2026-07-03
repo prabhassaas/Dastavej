@@ -1,37 +1,74 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+
+const REAL_LOGO_SRC = '/brand/prabhas-saas-logo.png';
+
 /**
- * Recreated inline-SVG version of the Prabhas SaaS mark (network/node "P"
- * tower in navy + saffron, an AI chip badge, and the tricolor swoosh under
- * the wordmark) so it renders crisply at any size with no image request.
- * If the source raster logo becomes available, swap this file's contents
- * for an <img>/<Image> pointing at it — the call sites won't need to change.
+ * Prabhas SaaS mark. Renders the hand-traced SVG fallback immediately (so
+ * there is never a broken-image flash), and silently upgrades to the real
+ * logo file if one is present — drop it at `public/brand/prabhas-saas-logo.png`
+ * (commit it via the GitHub UI or a push) and it takes over everywhere this
+ * component is used, no code change needed. This sandbox has no file access
+ * to images pasted in chat (inline chat attachments don't land on disk
+ * here), so pixel-exact reproduction isn't possible without that file.
  */
 export function PrabhasSaasMark({ className = 'h-16 w-16' }: { className?: string }) {
+  const [realLogoReady, setRealLogoReady] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const probe = new Image();
+    probe.onload = () => {
+      if (!cancelled) setRealLogoReady(true);
+    };
+    probe.src = REAL_LOGO_SRC;
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (realLogoReady) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={REAL_LOGO_SRC} alt="Prabhas SaaS" className={`${className} object-contain`} />
+    );
+  }
+
+  return <PrabhasSaasMarkFallback className={className} />;
+}
+
+/** Hand-traced approximation of the network/node "flag tower" mark. */
+function PrabhasSaasMarkFallback({ className = 'h-16 w-16' }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 120 120" role="img" aria-label="Prabhas SaaS">
-      <g stroke="#0f2a4a" strokeWidth="2.5" fill="none" strokeLinecap="round">
-        <path d="M30 18 L60 18 M30 18 L30 55 M30 30 L60 30 M30 42 L48 55 M30 55 L48 42" />
-        <circle cx="30" cy="18" r="3.2" fill="#0f2a4a" />
-        <circle cx="60" cy="18" r="3.2" fill="#0f2a4a" />
-        <circle cx="30" cy="30" r="3.2" fill="#0f2a4a" />
-        <circle cx="30" cy="42" r="3.2" fill="#0f2a4a" />
-        <circle cx="30" cy="55" r="3.2" fill="#0f2a4a" />
-        <circle cx="48" cy="42" r="3.2" fill="#0f2a4a" />
-        <circle cx="48" cy="55" r="3.2" fill="#0f2a4a" />
+    <svg className={className} viewBox="0 0 100 100" role="img" aria-label="Prabhas SaaS">
+      {/* navy (left) network */}
+      <g stroke="#0f2a4a" strokeWidth="2.4" fill="none" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M16 14 L42 14 M16 14 L16 46 M16 27 L42 14 M16 27 L34 40 M16 40 L34 27 M16 46 Q16 56 28 58" />
+        <circle cx="16" cy="14" r="3" fill="#0f2a4a" />
+        <circle cx="42" cy="14" r="3" fill="#0f2a4a" />
+        <circle cx="16" cy="27" r="3" fill="#0f2a4a" />
+        <circle cx="16" cy="40" r="3" fill="#0f2a4a" />
+        <circle cx="16" cy="46" r="3" fill="#0f2a4a" />
+        <circle cx="34" cy="27" r="3" fill="#0f2a4a" />
+        <circle cx="34" cy="40" r="3" fill="#0f2a4a" />
+        <circle cx="28" cy="58" r="2.6" fill="#0f2a4a" />
       </g>
-      <g stroke="#f2960c" strokeWidth="2.5" fill="none" strokeLinecap="round">
-        <path d="M60 18 L90 18 M60 18 L90 30 M90 18 L60 30 M60 30 L48 55 M60 55 L90 42 M60 68 L48 55 M60 68 L90 55 M60 68 L84 100" />
-        <circle cx="90" cy="18" r="3.2" fill="#f2960c" />
-        <circle cx="60" cy="30" r="3.2" fill="#f2960c" />
-        <circle cx="60" cy="55" r="3.2" fill="#f2960c" />
-        <circle cx="90" cy="42" r="3.2" fill="#f2960c" />
-        <circle cx="60" cy="68" r="3.2" fill="#f2960c" />
-        <circle cx="90" cy="55" r="3.2" fill="#f2960c" />
-        <circle cx="84" cy="100" r="3.2" fill="#f2960c" />
+      {/* saffron (right) network — extends further down, like a longer flag tail */}
+      <g stroke="#f2960c" strokeWidth="2.4" fill="none" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M42 14 L74 14 M42 14 L74 25 M74 14 L42 25 M42 25 L34 40 M42 40 L74 32 M50 54 L34 40 M50 54 L74 44 M50 54 L64 74 M64 74 L58 88" />
+        <circle cx="74" cy="14" r="3" fill="#f2960c" />
+        <circle cx="42" cy="25" r="3" fill="#f2960c" />
+        <circle cx="42" cy="40" r="3" fill="#f2960c" />
+        <circle cx="74" cy="32" r="3" fill="#f2960c" />
+        <circle cx="50" cy="54" r="3" fill="#f2960c" />
+        <circle cx="74" cy="44" r="3" fill="#f2960c" />
+        <circle cx="64" cy="74" r="2.8" fill="#f2960c" />
+        <circle cx="58" cy="88" r="2.4" fill="#f2960c" />
       </g>
-      <circle cx="66" cy="52" r="14" fill="#0f2a4a" />
-      <text x="66" y="56" fontFamily="Arial, sans-serif" fontSize="9" fontWeight="700" fill="#fff" textAnchor="middle">
+      {/* AI chip badge at the seam where the two networks meet */}
+      <circle cx="52" cy="43" r="12.5" fill="#0f2a4a" stroke="#fff" strokeWidth="1.5" />
+      <text x="52" y="47" fontFamily="Arial, sans-serif" fontSize="8.5" fontWeight="700" fill="#fff" textAnchor="middle">
         AI
       </text>
     </svg>
