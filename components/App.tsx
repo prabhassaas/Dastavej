@@ -62,7 +62,7 @@ const TABS: {
 ];
 
 function Workspace() {
-  const { state, dispatch } = usePdfStore();
+  const { state, dispatch, clearAll } = usePdfStore();
   const { theme, toggle } = useTheme();
   const hasDocument = state.pages.length > 0;
 
@@ -70,10 +70,15 @@ function Workspace() {
     <div className="flex h-full flex-col">
       {/* Top navigation bar */}
       <nav className="flex h-14 shrink-0 items-center gap-3 border-b border-slate-200 bg-white px-4 dark:border-slate-800 dark:bg-slate-900/60">
-        <div className="flex items-center gap-2.5" title="Dastavej">
+        <Link
+          href="/"
+          onClick={() => clearAll()}
+          className="flex items-center gap-2.5 rounded-lg transition hover:opacity-80"
+          title="Dastavej — back to home"
+        >
           <LogoMark className="h-8 w-8" />
           <span className="hidden text-base font-bold tracking-tight lg:block">Dastavej</span>
-        </div>
+        </Link>
 
         <div className="mx-2 flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto">
           {TABS.map((tab) => {

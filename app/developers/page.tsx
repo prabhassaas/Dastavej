@@ -35,7 +35,9 @@ export default function DevelopersPage() {
         </Link>
 
         <div className="mt-8 flex items-center gap-4">
-          <LogoMark className="h-14 w-14" />
+          <Link href="/" title="Dastavej — back to home" className="transition hover:opacity-80">
+            <LogoMark className="h-14 w-14" />
+          </Link>
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Dastavej Core, for developers</h1>
             <p className="text-sm text-slate-500 dark:text-slate-400">
