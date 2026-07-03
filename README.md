@@ -27,6 +27,7 @@ and every byte of every PDF you open stays on your device.
 | **Print** | One-click printing through the browser dialog; a live date & clock sits in the header and every printed page is stamped with the print date & time. |
 | **Themes** | Light and dark UI with a one-click toggle (defaults to your OS preference). |
 | **OCR** | Pages are rasterized to a canvas and recognized by `tesseract.js`, which runs its WASM engine inside its own **Web Worker**. The worker script, WASM core and English language model are self-hosted static assets — no CDN involved. Extracted text can be copied or downloaded as `.txt`. |
+| **Undo / redo** | Full history for page edits, annotations, organizer changes and watermark settings — buttons in the header plus **Ctrl+Z / Ctrl+Y** (Ctrl+Shift+Z also works). Rapid same-target edits (typing, dragging) coalesce into one step so undo reverts a whole edit, not one keystroke. Opening a new document or replacing the workspace (e.g. "use compressed as working file") starts a clean history rather than reaching back into a document that's no longer cached. |
 | **Splash screen** | Dastavej mark, "Powered by Prabhas SaaS" (the real logo, `public/brand/prabhas-saas-logo.svg`) and a Made-in-India note in a 2:1 card on every load. The green progress bar tracks real boot work (web fonts + the pdf.js engine loading), not a fixed timer — it only completes once the app is actually ready. |
 
 ## The form → Excel flow

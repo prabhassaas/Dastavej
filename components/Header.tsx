@@ -5,7 +5,16 @@ import { usePdfStore } from '@/lib/store';
 import { assemblePdf } from '@/lib/export';
 import { downloadBytes } from '@/lib/download';
 import { printPdf } from '@/lib/print';
-import { IconClock, IconDownload, IconPlus, IconPrinter, IconSpinner, IconTrash } from './Icons';
+import {
+  IconClock,
+  IconDownload,
+  IconPlus,
+  IconPrinter,
+  IconRedo,
+  IconSpinner,
+  IconTrash,
+  IconUndo,
+} from './Icons';
 
 /** Live date & clock shown next to the print button. */
 function DateClock() {
@@ -38,7 +47,7 @@ function DateClock() {
 }
 
 export default function Header() {
-  const { state, dispatch, addFiles, clearAll } = usePdfStore();
+  const { state, dispatch, addFiles, clearAll, undo, redo, canUndo, canRedo } = usePdfStore();
   const [exporting, setExporting] = useState(false);
   const [printing, setPrinting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -90,6 +99,28 @@ export default function Header() {
         <p className="text-xs text-slate-500 dark:text-slate-400">
           {state.pages.length} page{state.pages.length === 1 ? '' : 's'}
         </p>
+      </div>
+
+      <div className="flex items-center rounded-lg border border-slate-300 dark:border-slate-700">
+        <button
+          onClick={undo}
+          disabled={!canUndo}
+          className="rounded-l-lg p-2 text-slate-500 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-30 dark:text-slate-300 dark:hover:bg-slate-800"
+          title="Undo (Ctrl+Z)"
+          aria-label="Undo"
+        >
+          <IconUndo className="h-4 w-4" />
+        </button>
+        <div className="h-5 w-px bg-slate-300 dark:bg-slate-700" />
+        <button
+          onClick={redo}
+          disabled={!canRedo}
+          className="rounded-r-lg p-2 text-slate-500 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-30 dark:text-slate-300 dark:hover:bg-slate-800"
+          title="Redo (Ctrl+Y)"
+          aria-label="Redo"
+        >
+          <IconRedo className="h-4 w-4" />
+        </button>
       </div>
 
       <DateClock />
