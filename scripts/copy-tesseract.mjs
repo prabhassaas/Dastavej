@@ -25,9 +25,11 @@ for (const file of readdirSync(coreSrc)) {
 }
 
 // English language model, self-hosted so OCR needs no CDN at all.
+// 4.0.0_best_int is the highest-accuracy integer LSTM model (slower but
+// noticeably more precise than the default "fast" model).
 mkdirSync(join(dest, 'lang'), { recursive: true });
 cpSync(
-  join(root, 'node_modules', '@tesseract.js-data', 'eng', '4.0.0', 'eng.traineddata.gz'),
+  join(root, 'node_modules', '@tesseract.js-data', 'eng', '4.0.0_best_int', 'eng.traineddata.gz'),
   join(dest, 'lang', 'eng.traineddata.gz'),
 );
 

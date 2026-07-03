@@ -8,6 +8,7 @@ export type Tab =
   | 'marks'
   | 'convert'
   | 'form'
+  | 'ai'
   | 'compress'
   | 'ocr';
 
@@ -18,6 +19,8 @@ export type Tab =
 export type Annotation =
   | { id: string; kind: 'highlight'; x: number; y: number; w: number; h: number; color: string }
   | { id: string; kind: 'box'; x: number; y: number; w: number; h: number; color: string }
+  /** opaque patch that hides the original spot after a "magic grab" */
+  | { id: string; kind: 'erase'; x: number; y: number; w: number; h: number; color: string }
   | { id: string; kind: 'ink'; points: [number, number][]; color: string; strokeWidth: number }
   | {
       id: string;

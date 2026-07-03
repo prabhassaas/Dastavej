@@ -19,6 +19,7 @@ const ANNOT_TOOLS: { id: AnnotTool; label: string }[] = [
   { id: 'box', label: 'Box' },
   { id: 'ink', label: 'Draw' },
   { id: 'image', label: 'Image / sign' },
+  { id: 'grab', label: '✨ Magic grab' },
 ];
 
 const ANNOT_HINTS: Record<AnnotTool, string> = {
@@ -26,6 +27,7 @@ const ANNOT_HINTS: Record<AnnotTool, string> = {
   box: 'Drag to draw an outlined box around content.',
   ink: 'Draw freehand with the mouse or a touch pen — great for signatures.',
   image: 'Upload a signature, stamp or photo, then drag to position and resize it.',
+  grab: 'Drag around a seal, signature or any object to lift it off the page — it becomes a movable, resizable object (background removed, original spot cleaned).',
 };
 
 /**
@@ -306,6 +308,7 @@ export default function Viewer({ mode }: { mode: ViewerMode }) {
                 viewport={viewport}
                 tool={annotTool}
                 color={annotColor}
+                canvas={canvasRef.current}
               />
             )}
             {/* live preview of document marks (watermark + header/footer) */}

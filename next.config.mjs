@@ -3,6 +3,8 @@ const nextConfig = {
   // Fully static export — the app has no server component. Deploy the `out/`
   // directory to any static host (GitHub Pages, Netlify, Cloudflare Pages…).
   output: 'export',
+  // emit route/index.html so plain static hosts serve /about/ correctly
+  trailingSlash: true,
   reactStrictMode: true,
   webpack: (config, { isServer, webpack }) => {
     if (!isServer) {

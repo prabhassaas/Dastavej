@@ -83,8 +83,10 @@ export async function buildFormPdf(options: {
   logo?: FormLogo | null;
   /** reserve an "affix photograph" box top-right (35×45 mm) */
   photoBox?: boolean;
+  /** optional applicant photo drawn inside the photo box */
+  photo?: FormLogo | null;
 }): Promise<Uint8Array> {
-  const { title, fields, pageSize, orientation, logo, photoBox } = options;
+  const { title, fields, pageSize, orientation, logo, photoBox, photo } = options;
   const [pw, ph] = PAGE_SIZES[pageSize] ?? PAGE_SIZES.A4;
   const [width, height] = orientation === 'landscape' ? [ph, pw] : [pw, ph];
 
@@ -135,17 +137,29 @@ export async function buildFormPdf(options: {
       borderColor: rgb(0.45, 0.5, 0.6),
       borderWidth: 1,
     });
-    const lines = ['Affix recent', 'photograph', '(35 × 45 mm)'];
-    lines.forEach((line, i) => {
-      const lw = font.widthOfTextAtSize(line, 8);
-      page.drawText(line, {
-        x: bx + (PHOTO_W - lw) / 2,
-        y: by + PHOTO_H / 2 + 10 - i * 11,
-        size: 8,
-        font,
-        color: rgb(0.55, 0.58, 0.65),
+    if (photo) {
+      const img =
+        photo.mime === 'image/png'
+          ? await doc.embedPng(photo.bytes)
+          : await doc.embedJpg(photo.bytes);
+      // contain-fit inside the box
+      const scale = Math.min(PHOTO_W / img.width, PHOTO_H / img.height);
+      const w = img.width * scale;
+      const h = img.height * scale;
+      page.drawImage(img, { x: bx + (PHOTO_W - w) / 2, y: by + (PHOTO_H - h) / 2, width: w, height: h });
+    } else {
+      const lines = ['Affix recent', 'photograph', '(35 × 45 mm)'];
+      lines.forEach((line, i) => {
+        const lw = font.widthOfTextAtSize(line, 8);
+        page.drawText(line, {
+          x: bx + (PHOTO_W - lw) / 2,
+          y: by + PHOTO_H / 2 + 10 - i * 11,
+          size: 8,
+          font,
+          color: rgb(0.55, 0.58, 0.65),
+        });
       });
-    });
+    }
   }
 
   // fields begin below the tallest header element
@@ -174,7 +188,77 @@ export async function buildFormPdf(options: {
 
   const fieldWidth = width - MARGIN * 2;
 
-  for (const spec of fields) {
+  /** Field types short enough to sit two per row (space optimization). */
+  const SHORT_TYPES: FormFieldType[] = ['number', 'date', 'time', 'phone', 'email', 'dropdown'];
+  const isShort = (s: FormFieldSpec) => SHORT_TYPES.includes(s.type);
+
+  /** Draw one short field (label + input) at a given column without moving y. */
+  const drawShortField = (spec: FormFieldSpec, x: number, colWidth: number) => {
+    const name = uniqueName(spec.label);
+    const label = sanitize(spec.label.trim() || 'Untitled field') + (spec.required ? ' *' : '');
+    page.drawText(label, { x, y: y - LABEL_SIZE, size: LABEL_SIZE, font: bold });
+    const inputY = y - LABEL_SIZE - 8 - 22;
+    if (spec.type === 'dropdown') {
+      const dropdown = form.createDropdown(name);
+      const opts = (spec.options.length ? spec.options : ['Option 1', 'Option 2']).map(sanitize);
+      dropdown.addOptions(opts);
+      if (spec.defaultValue && opts.includes(sanitize(spec.defaultValue))) {
+        dropdown.select(sanitize(spec.defaultValue));
+      }
+      dropdown.addToPage(page, {
+        x,
+        y: inputY,
+        width: colWidth,
+        height: 22,
+        borderColor: rgb(0.45, 0.5, 0.6),
+        borderWidth: 1,
+      });
+      dropdown.setFontSize(INPUT_TEXT_SIZE);
+      if (spec.required) dropdown.enableRequired();
+    } else {
+      const placeholder = PLACEHOLDERS[spec.type];
+      if (placeholder) {
+        const lw = bold.widthOfTextAtSize(label, LABEL_SIZE);
+        page.drawText(placeholder, {
+          x: x + lw + 8,
+          y: y - LABEL_SIZE,
+          size: LABEL_SIZE - 1,
+          font,
+          color: rgb(0.55, 0.58, 0.65),
+        });
+      }
+      const field = form.createTextField(name);
+      if (spec.defaultValue) field.setText(sanitize(spec.defaultValue));
+      field.addToPage(page, {
+        x,
+        y: inputY,
+        width: colWidth,
+        height: 22,
+        borderColor: rgb(0.45, 0.5, 0.6),
+        borderWidth: 1,
+      });
+      field.setFontSize(INPUT_TEXT_SIZE);
+      if (spec.required) field.enableRequired();
+    }
+  };
+
+  for (let i = 0; i < fields.length; i++) {
+    const spec = fields[i];
+    const nextSpec = fields[i + 1];
+
+    // Two consecutive short fields share one row — denser, professional layout.
+    if (isShort(spec) && nextSpec && isShort(nextSpec)) {
+      const gutter = 24;
+      const colWidth = (fieldWidth - gutter) / 2;
+      const blockHeight = LABEL_SIZE + 8 + 22 + 18;
+      newPageIfNeeded(blockHeight); // whole row is atomic — never splits pages
+      drawShortField(spec, MARGIN, colWidth);
+      drawShortField(nextSpec, MARGIN + colWidth + gutter, colWidth);
+      y -= blockHeight;
+      i++;
+      continue;
+    }
+
     const name = uniqueName(spec.label);
     const label = sanitize(spec.label.trim() || 'Untitled field') + (spec.required ? ' *' : '');
 
@@ -198,7 +282,19 @@ export async function buildFormPdf(options: {
       }
       case 'radio': {
         const options = spec.options.length ? spec.options : ['Option 1', 'Option 2'];
-        newPageIfNeeded(30 + 24);
+        // Pre-measure how many rows the options need so the whole group is
+        // atomic — a group never bleeds onto the next page.
+        let rows = 1;
+        let probeX = MARGIN;
+        for (const opt of options) {
+          const optWidth = 20 + font.widthOfTextAtSize(sanitize(opt), LABEL_SIZE) + 18;
+          if (probeX + optWidth > width - MARGIN) {
+            rows++;
+            probeX = MARGIN;
+          }
+          probeX += optWidth;
+        }
+        newPageIfNeeded(LABEL_SIZE + 10 + rows * 24 + 10);
         page.drawText(label, { x: MARGIN, y: y - LABEL_SIZE, size: LABEL_SIZE, font: bold });
         y -= LABEL_SIZE + 10;
         const group = form.createRadioGroup(name);
@@ -207,7 +303,6 @@ export async function buildFormPdf(options: {
           const optWidth = 20 + font.widthOfTextAtSize(sanitize(opt), LABEL_SIZE) + 18;
           if (x + optWidth > width - MARGIN) {
             x = MARGIN;
-            newPageIfNeeded(26);
             y -= 24;
           }
           group.addOptionToPage(sanitize(opt), page, {

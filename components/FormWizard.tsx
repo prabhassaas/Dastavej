@@ -61,6 +61,8 @@ export default function FormWizard() {
   const [fields, setFields] = useState<FormFieldSpec[]>(INITIAL_FIELDS);
   const [photoBox, setPhotoBox] = useState(false);
   const [logo, setLogo] = useState<(FormLogo & { previewUrl: string }) | null>(null);
+  const [photo, setPhoto] = useState<(FormLogo & { previewUrl: string }) | null>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
   const [templateId, setTemplateId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
@@ -75,18 +77,28 @@ export default function FormWizard() {
     setSavedMsg(null);
   };
 
-  const pickLogo = async (file: File) => {
+  const readImage = async (file: File) => {
     if (file.type !== 'image/png' && file.type !== 'image/jpeg') {
-      dispatch({ type: 'SET_ERROR', error: 'Logo must be a PNG or JPEG image.' });
-      return;
+      dispatch({ type: 'SET_ERROR', error: 'Please choose a PNG or JPEG image.' });
+      return null;
     }
     const bytes = new Uint8Array(await file.arrayBuffer());
     const mime = file.type as FormLogo['mime'];
-    setLogo({
+    return {
       bytes,
       mime,
       previewUrl: URL.createObjectURL(new Blob([bytes.slice().buffer], { type: mime })),
-    });
+    };
+  };
+
+  const pickLogo = async (file: File) => {
+    const img = await readImage(file);
+    if (img) setLogo(img);
+  };
+
+  const pickPhoto = async (file: File) => {
+    const img = await readImage(file);
+    if (img) setPhoto(img);
   };
 
   const patchField = (id: string, patch: Partial<FormFieldSpec>) =>
@@ -110,6 +122,7 @@ export default function FormWizard() {
       orientation,
       logo,
       photoBox,
+      photo: photoBox ? photo : null,
     });
 
   const handleSave = async (openInEditor: boolean) => {
@@ -310,15 +323,49 @@ export default function FormWizard() {
               }}
             />
           </div>
-          <label className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+              <input
+                type="checkbox"
+                checked={photoBox}
+                onChange={(e) => setPhotoBox(e.target.checked)}
+                className="h-4 w-4 accent-indigo-500"
+              />
+              Applicant photo box (35 × 45 mm, top-right)
+            </label>
+            {photoBox &&
+              (photo ? (
+                <span className="flex items-center gap-2 rounded-lg border border-slate-300 px-2 py-1 dark:border-slate-700">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={photo.previewUrl} alt="applicant" className="h-8 w-6 rounded-sm object-cover" />
+                  <button
+                    onClick={() => setPhoto(null)}
+                    className="rounded p-0.5 text-slate-400 hover:text-red-500"
+                    title="Remove photo"
+                  >
+                    <IconX className="h-3.5 w-3.5" />
+                  </button>
+                </span>
+              ) : (
+                <button
+                  onClick={() => photoInputRef.current?.click()}
+                  className="rounded-lg border border-dashed border-slate-400 px-2.5 py-1.5 text-xs text-slate-500 transition hover:border-indigo-400 hover:text-indigo-500 dark:border-slate-600 dark:text-slate-400"
+                >
+                  Upload photo now (optional)
+                </button>
+              ))}
             <input
-              type="checkbox"
-              checked={photoBox}
-              onChange={(e) => setPhotoBox(e.target.checked)}
-              className="h-4 w-4 accent-indigo-500"
+              ref={photoInputRef}
+              type="file"
+              accept="image/png,image/jpeg"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void pickPhoto(f);
+                e.target.value = '';
+              }}
             />
-            Applicant photo box (35 × 45 mm, top-right)
-          </label>
+          </div>
         </div>
 
         {/* Field list */}

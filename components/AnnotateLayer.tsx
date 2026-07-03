@@ -5,13 +5,85 @@ import { usePdfStore } from '@/lib/store';
 import { uid, type Annotation, type PageEntry, type ViewportLike } from '@/lib/types';
 import { IconMove, IconX } from './Icons';
 
-export type AnnotTool = 'highlight' | 'box' | 'ink' | 'image';
+export type AnnotTool = 'highlight' | 'box' | 'ink' | 'image' | 'grab';
 
 interface Props {
   pageEntry: PageEntry;
   viewport: ViewportLike;
   tool: AnnotTool;
   color: string;
+  /** the rendered page canvas — needed by the magic-grab tool */
+  canvas?: HTMLCanvasElement | null;
+}
+
+/**
+ * "Magic grab": cut the dragged region out of the rendered canvas, make the
+ * background transparent (sampled from the region border, like a chroma key),
+ * cover the original spot with a background-colored patch, and re-add the
+ * cutout as a movable/resizable image object.
+ */
+async function grabRegion(
+  canvas: HTMLCanvasElement,
+  viewport: ViewportLike,
+  rect: { x: number; y: number; w: number; h: number },
+): Promise<{ png: Uint8Array; url: string; bgHex: string } | null> {
+  const scale = canvas.width / viewport.width; // device-pixel ratio of the render
+  const sx = Math.max(0, Math.round(rect.x * scale));
+  const sy = Math.max(0, Math.round(rect.y * scale));
+  const sw = Math.min(canvas.width - sx, Math.round(rect.w * scale));
+  const sh = Math.min(canvas.height - sy, Math.round(rect.h * scale));
+  if (sw < 4 || sh < 4) return null;
+
+  const cut = document.createElement('canvas');
+  cut.width = sw;
+  cut.height = sh;
+  const ctx = cut.getContext('2d', { willReadFrequently: true })!;
+  ctx.drawImage(canvas, sx, sy, sw, sh, 0, 0, sw, sh);
+
+  const img = ctx.getImageData(0, 0, sw, sh);
+  const d = img.data;
+
+  // Sample the border to find the background color.
+  let r = 0,
+    g = 0,
+    b = 0,
+    n = 0;
+  const sample = (x: number, y: number) => {
+    const i = (y * sw + x) * 4;
+    r += d[i];
+    g += d[i + 1];
+    b += d[i + 2];
+    n++;
+  };
+  for (let x = 0; x < sw; x += 3) {
+    sample(x, 0);
+    sample(x, sh - 1);
+  }
+  for (let y = 0; y < sh; y += 3) {
+    sample(0, y);
+    sample(sw - 1, y);
+  }
+  r /= n;
+  g /= n;
+  b /= n;
+
+  // Knock out pixels close to the background color.
+  const THRESHOLD = 60;
+  for (let i = 0; i < d.length; i += 4) {
+    const dist = Math.hypot(d[i] - r, d[i + 1] - g, d[i + 2] - b);
+    if (dist < THRESHOLD) d[i + 3] = 0;
+    else if (dist < THRESHOLD * 1.6) d[i + 3] = Math.round(((dist - THRESHOLD) / (THRESHOLD * 0.6)) * 255);
+  }
+  ctx.putImageData(img, 0, 0);
+
+  const blob = await new Promise<Blob | null>((resolve) => cut.toBlob(resolve, 'image/png'));
+  if (!blob) return null;
+  const toHex = (v: number) => Math.round(v).toString(16).padStart(2, '0');
+  return {
+    png: new Uint8Array(await blob.arrayBuffer()),
+    url: URL.createObjectURL(blob),
+    bgHex: `#${toHex(r)}${toHex(g)}${toHex(b)}`,
+  };
 }
 
 /**
@@ -19,7 +91,7 @@ interface Props {
  * ink, and place/drag/resize image stamps (signatures, logos, photos).
  * Geometry is committed in PDF user space so exports match the screen 1:1.
  */
-export default function AnnotateLayer({ pageEntry, viewport, tool, color }: Props) {
+export default function AnnotateLayer({ pageEntry, viewport, tool, color, canvas }: Props) {
   const { state, dispatch } = usePdfStore();
   const annots = state.annots[pageEntry.id] ?? [];
 
@@ -42,7 +114,7 @@ export default function AnnotateLayer({ pageEntry, viewport, tool, color }: Prop
     drawing.current = true;
     const [x, y] = local(e);
     if (tool === 'ink') setInkDraft([[x, y]]);
-    else setDraft({ x0: x, y0: y, x1: x, y1: y });
+    else setDraft({ x0: x, y0: y, x1: x, y1: y }); // highlight / box / grab all drag a rect
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
@@ -52,9 +124,46 @@ export default function AnnotateLayer({ pageEntry, viewport, tool, color }: Prop
     else setDraft((d) => (d ? { ...d, x1: x, y1: y } : d));
   };
 
-  const onPointerUp = () => {
+  const onPointerUp = async () => {
     if (!drawing.current) return;
     drawing.current = false;
+
+    if (tool === 'grab' && draft && canvas) {
+      const vx = Math.min(draft.x0, draft.x1);
+      const vy = Math.min(draft.y0, draft.y1);
+      const vw = Math.abs(draft.x1 - draft.x0);
+      const vh = Math.abs(draft.y1 - draft.y0);
+      setDraft(null);
+      if (vw > 6 && vh > 6) {
+        const grabbed = await grabRegion(canvas, viewport, { x: vx, y: vy, w: vw, h: vh });
+        if (grabbed) {
+          const [px0, py1] = toPdf(vx, vy + vh); // bottom-left in PDF space
+          const [px1, py0] = toPdf(vx + vw, vy);
+          const rect = { x: px0, y: py1, w: px1 - px0, h: py0 - py1 };
+          // 1) hide the original spot with a background-colored patch…
+          dispatch({
+            type: 'ADD_ANNOT',
+            pageId: pageEntry.id,
+            annot: { id: uid(), kind: 'erase', ...rect, color: grabbed.bgHex },
+          });
+          // 2) …then float the cutout on top as an editable object
+          dispatch({
+            type: 'ADD_ANNOT',
+            pageId: pageEntry.id,
+            annot: {
+              id: uid(),
+              kind: 'image',
+              ...rect,
+              bytes: grabbed.png,
+              mime: 'image/png',
+              previewUrl: grabbed.url,
+            },
+          });
+        }
+      }
+      setInkDraft([]);
+      return;
+    }
 
     if (tool === 'ink' && inkDraft.length > 1) {
       const points = inkDraft.map(([x, y]) => toPdf(x, y) as [number, number]);
@@ -115,7 +224,12 @@ export default function AnnotateLayer({ pageEntry, viewport, tool, color }: Prop
             height: Math.abs(draft.y1 - draft.y0),
             background: tool === 'highlight' ? color : 'transparent',
             opacity: tool === 'highlight' ? 0.35 : 1,
-            border: tool === 'box' ? `2px solid ${color}` : undefined,
+            border:
+              tool === 'box'
+                ? `2px solid ${color}`
+                : tool === 'grab'
+                  ? '2px dashed #6366f1'
+                  : undefined,
           }}
         />
       )}
@@ -204,7 +318,8 @@ function AnnotView({
         top: vyTop,
         width: w,
         height: h,
-        background: annot.kind === 'highlight' ? annot.color : 'transparent',
+        background:
+          annot.kind === 'highlight' || annot.kind === 'erase' ? annot.color : 'transparent',
         opacity: annot.kind === 'highlight' ? 0.35 : 1,
         border: annot.kind === 'box' ? `2px solid ${annot.color}` : undefined,
       }}

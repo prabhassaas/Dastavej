@@ -17,6 +17,7 @@ export default function OcrPanel() {
   const [status, setStatus] = useState('');
   const [results, setResults] = useState<OcrResult[]>([]);
   const [copied, setCopied] = useState(false);
+  const [enhance, setEnhance] = useState(false);
 
   const run = async (all: boolean) => {
     setRunning(true);
@@ -34,7 +35,7 @@ export default function OcrPanel() {
             ? `Rendering ${label}…`
             : `Recognizing text on ${label} — ${Math.round(p.progress * 100)}%`,
         );
-      });
+      }, { enhance });
       setResults(out);
       setStatus('');
     } catch (err) {
@@ -91,6 +92,17 @@ export default function OcrPanel() {
           </button>
           {status && <span className="text-sm text-indigo-500 dark:text-indigo-300">{status}</span>}
         </div>
+
+        <label className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+          <input
+            type="checkbox"
+            checked={enhance}
+            onChange={(e) => setEnhance(e.target.checked)}
+            className="h-4 w-4 accent-indigo-500"
+          />
+          Enhance low-quality scan (grayscale + auto-threshold) — turn on for faded photocopies
+          and phone photos; leave off for clean digital PDFs
+        </label>
 
         {results.length > 0 && (
           <>

@@ -117,6 +117,10 @@ async function drawAnnotations(doc: PDFDocument, page: PDFPage, annots: Annotati
           borderWidth: 2,
         });
         break;
+      case 'erase':
+        // opaque patch in the sampled background color (magic grab cleanup)
+        page.drawRectangle({ x: a.x, y: a.y, width: a.w, height: a.h, color: hexToRgb(a.color) });
+        break;
       case 'ink': {
         if (a.points.length < 2) break;
         // drawSvgPath uses a y-down coordinate system anchored at (x, y).
