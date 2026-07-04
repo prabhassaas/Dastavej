@@ -298,6 +298,14 @@ export default function AiPanel() {
               {settingsMsg}
             </p>
           )}
+          <p className="text-[11px] text-slate-400 dark:text-slate-500">
+            Using a local model? The server must allow requests from this page's origin (CORS),
+            or the browser will silently block the call. For Ollama, start it with{' '}
+            <code className="rounded bg-slate-100 px-1 py-0.5 dark:bg-slate-800">
+              OLLAMA_ORIGINS=* ollama serve
+            </code>
+            .
+          </p>
         </div>
 
         {/* Topic → PDF */}

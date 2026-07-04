@@ -21,7 +21,10 @@ export const AI_PRESETS: { name: string; endpoint: string; note: string }[] = [
   {
     name: 'Ollama (local, unlimited)',
     endpoint: 'http://localhost:11434/v1',
-    note: 'Install from ollama.com, run `ollama pull llama3.1` — free forever, fully private.',
+    note:
+      'Install from ollama.com, run `ollama pull llama3.1`, then start it with ' +
+      '`OLLAMA_ORIGINS=* ollama serve` so your browser is allowed to call it (CORS) — free ' +
+      'forever, fully private.',
   },
   {
     name: 'LM Studio (local)',
@@ -65,15 +68,30 @@ export async function aiChat(messages: ChatMessage[], signal?: AbortSignal): Pro
   if (!s.endpoint || !s.model) {
     throw new Error('Configure an AI endpoint and model first (AI tab → Provider settings).');
   }
-  const res = await fetch(`${s.endpoint.replace(/\/+$/, '')}/chat/completions`, {
-    method: 'POST',
-    signal,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(s.apiKey ? { Authorization: `Bearer ${s.apiKey}` } : {}),
-    },
-    body: JSON.stringify({ model: s.model, messages, stream: false }),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${s.endpoint.replace(/\/+$/, '')}/chat/completions`, {
+      method: 'POST',
+      signal,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(s.apiKey ? { Authorization: `Bearer ${s.apiKey}` } : {}),
+      },
+      body: JSON.stringify({ model: s.model, messages, stream: false }),
+    });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') throw err;
+    // A network-level failure here almost always means either the server
+    // isn't running, or (very commonly with local Ollama/LM Studio) it's
+    // running but refusing the browser's cross-origin request — the fetch
+    // API reports both as an opaque "Failed to fetch" with no other detail.
+    throw new Error(
+      `Could not reach ${s.endpoint} — is the server running? If this is a local model ` +
+        `(Ollama, LM Studio), the server also needs to allow requests from this page's ` +
+        `origin (CORS). For Ollama: stop it and restart with ` +
+        `\`OLLAMA_ORIGINS=* ollama serve\` (or set OLLAMA_ORIGINS to this app's exact URL).`,
+    );
+  }
   if (!res.ok) {
     const body = (await res.text()).slice(0, 300);
     throw new Error(`AI endpoint returned ${res.status}: ${body}`);

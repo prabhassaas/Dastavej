@@ -50,15 +50,7 @@ const TABS: {
   { id: 'marks', label: 'Watermark', icon: <IconDroplet className="h-4 w-4" />, needsDoc: true },
   { id: 'convert', label: 'Convert', icon: <IconConvert className="h-4 w-4" />, needsDoc: true },
   { id: 'form', label: 'Forms', icon: <IconForm className="h-4 w-4" />, needsDoc: false },
-  {
-    id: 'ai',
-    label: 'AI',
-    icon: <IconSparkle className="h-4 w-4" />,
-    needsDoc: false,
-    disabled: true,
-    disabledReason:
-      'AI features are paused while we build local, on-device AI support — coming soon.',
-  },
+  { id: 'ai', label: 'AI', icon: <IconSparkle className="h-4 w-4" />, needsDoc: false },
   { id: 'compress', label: 'Compress', icon: <IconShrink className="h-4 w-4" />, needsDoc: true },
   { id: 'ocr', label: 'OCR', icon: <IconScan className="h-4 w-4" />, needsDoc: false },
   { id: 'voice', label: 'Read aloud', icon: <IconVolume className="h-4 w-4" />, needsDoc: true },
