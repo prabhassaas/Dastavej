@@ -20,6 +20,7 @@ import {
   type FormRow,
 } from '@/lib/formData';
 import { downloadBytes } from '@/lib/download';
+import { flattenFormPdf } from '@/lib/flatten';
 import { uid } from '@/lib/types';
 import {
   IconArrowDown,
@@ -27,6 +28,7 @@ import {
   IconDownload,
   IconForm,
   IconImage,
+  IconLock,
   IconPlus,
   IconSpinner,
   IconTable,
@@ -53,7 +55,7 @@ const INITIAL_FIELDS = (): FormFieldSpec[] => [
 export default function FormWizard() {
   const { dispatch, addGeneratedPdf } = usePdfStore();
 
-  const [mode, setMode] = useState<'design' | 'responses'>('design');
+  const [mode, setMode] = useState<'design' | 'responses' | 'flatten'>('design');
   const [title, setTitle] = useState('My Form');
   const [fileName, setFileName] = useState('my-form');
   const [pageSize, setPageSize] = useState<keyof typeof PAGE_SIZES>('A4');
@@ -203,11 +205,24 @@ export default function FormWizard() {
               <IconTable className="h-3.5 w-3.5" />
               2 · Responses → Excel
             </button>
+            <button
+              onClick={() => setMode('flatten')}
+              className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium transition ${
+                mode === 'flatten'
+                  ? 'bg-indigo-500 text-white'
+                  : 'text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white'
+              }`}
+            >
+              <IconLock className="h-3.5 w-3.5" />
+              3 · Flatten &amp; sign
+            </button>
           </div>
         </div>
 
         {mode === 'responses' ? (
           <ResponsesView />
+        ) : mode === 'flatten' ? (
+          <FlattenView />
         ) : (
           <>
         {/* Templates */}
@@ -666,6 +681,109 @@ function ResponsesView() {
             </button>
           </div>
         </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Step 3: lock a filled form. Bakes AcroForm field values into the page
+ * content and removes the interactive widgets (pdf-lib's form.flatten()),
+ * so the result can't be altered — the finishing step of a sign-and-send
+ * workflow, alongside the signature stamping in the Annotate tab.
+ */
+function FlattenView() {
+  const { dispatch, addGeneratedPdf } = usePdfStore();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [source, setSource] = useState<{ name: string; bytes: Uint8Array } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<Uint8Array | null>(null);
+
+  const pick = async (file: File) => {
+    setSource({ name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) });
+    setResult(null);
+  };
+
+  const flatten = async () => {
+    if (!source) return;
+    setBusy(true);
+    setResult(null);
+    try {
+      const bytes = await flattenFormPdf(source.bytes);
+      setResult(bytes);
+    } catch (err) {
+      dispatch({
+        type: 'SET_ERROR',
+        error: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <p className="text-sm text-slate-500 dark:text-slate-400">
+          Upload a filled form (yours, or any AcroForm PDF someone sent back) and flatten it — the
+          entered values are burned into the page content and the fields become permanently
+          read-only. Combine with a signature from the <b>Annotate</b> tab for a simple
+          sign-and-lock workflow, entirely on your device.
+        </p>
+      </div>
+
+      <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900/60">
+        <button
+          onClick={() => inputRef.current?.click()}
+          className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 py-6 text-sm text-slate-500 transition hover:border-indigo-400 hover:text-indigo-500 dark:border-slate-700 dark:text-slate-400"
+        >
+          <IconPlus className="h-4 w-4" />
+          {source ? `Change file (${source.name})` : 'Upload a filled form PDF'}
+        </button>
+        <input
+          ref={inputRef}
+          type="file"
+          accept="application/pdf,.pdf"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) void pick(f);
+            e.target.value = '';
+          }}
+        />
+
+        <button
+          onClick={() => void flatten()}
+          disabled={!source || busy}
+          className="flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-400 disabled:opacity-50"
+        >
+          {busy ? <IconSpinner className="h-4 w-4" /> : <IconLock className="h-4 w-4" />}
+          Flatten
+        </button>
+      </div>
+
+      {result && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-4 dark:border-emerald-500/30 dark:bg-emerald-500/5">
+          <span className="text-sm text-emerald-700 dark:text-emerald-300">
+            ✓ Flattened — the form fields are now permanently locked.
+          </span>
+          <button
+            onClick={() => downloadBytes(result, (source?.name ?? 'form').replace(/\.pdf$/i, '-flattened.pdf'))}
+            className="flex items-center gap-1.5 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-400"
+          >
+            <IconDownload className="h-4 w-4" />
+            Download
+          </button>
+          <button
+            onClick={async () => {
+              await addGeneratedPdf((source?.name ?? 'form').replace(/\.pdf$/i, '-flattened.pdf'), result);
+              dispatch({ type: 'SET_TAB', tab: 'view' });
+            }}
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm dark:border-slate-700"
+          >
+            Open in editor
+          </button>
+        </div>
       )}
     </div>
   );

@@ -4,9 +4,11 @@ import { useRef, useState } from 'react';
 import { usePdfStore } from '@/lib/store';
 import { assemblePdf } from '@/lib/export';
 import { downloadBytes } from '@/lib/download';
+import { parsePageRanges, splitPdfByRanges, splitPdfEveryNPages } from '@/lib/pdfOps';
+import { createZip } from '@/lib/zip';
 import type { PageEntry } from '@/lib/types';
 import PageThumb from './PageThumb';
-import { IconCopy, IconExtract, IconPlus, IconRotate, IconTrash } from './Icons';
+import { IconCopy, IconExtract, IconPlus, IconRotate, IconSplit, IconSpinner, IconTrash } from './Icons';
 
 /**
  * Grid of page thumbnails. Drag to reorder, delete or rotate single pages,
@@ -19,6 +21,7 @@ export default function PageOrganizer() {
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [overIndex, setOverIndex] = useState<number | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const [splitOpen, setSplitOpen] = useState(false);
 
   const multipleSources = Object.keys(state.sources).length > 1;
 
@@ -68,6 +71,18 @@ export default function PageOrganizer() {
             <IconPlus className="h-4 w-4" />
             Add / merge PDFs
           </button>
+          <button
+            onClick={() => setSplitOpen((v) => !v)}
+            disabled={state.pages.length < 2}
+            className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm transition disabled:opacity-40 ${
+              splitOpen
+                ? 'border-indigo-400 bg-indigo-500/10 text-indigo-600 dark:text-indigo-300'
+                : 'border-slate-300 text-slate-600 hover:border-indigo-400 hover:text-indigo-500 dark:border-slate-700 dark:text-slate-300'
+            }`}
+          >
+            <IconSplit className="h-4 w-4" />
+            Split…
+          </button>
         </div>
         <input
           ref={inputRef}
@@ -81,6 +96,8 @@ export default function PageOrganizer() {
           }}
         />
       </div>
+
+      {splitOpen && <SplitPanel onClose={() => setSplitOpen(false)} />}
 
       <div className="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-4">
         {state.pages.map((entry, index) => {
@@ -173,6 +190,128 @@ export default function PageOrganizer() {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Split the current working document (in its current order, with edits and
+ * annotations applied) into multiple PDFs — either every N pages, or by a
+ * custom comma-separated list of page ranges — bundled into one ZIP.
+ */
+function SplitPanel({ onClose }: { onClose: () => void }) {
+  const { state, dispatch } = usePdfStore();
+  const [mode, setMode] = useState<'every-n' | 'ranges'>('every-n');
+  const [everyN, setEveryN] = useState(1);
+  const [rangeSpec, setRangeSpec] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const run = async () => {
+    setBusy(true);
+    try {
+      const bytes = await assemblePdf(state.sources, state.pages, state.edits, {
+        annots: state.annots,
+        marks: state.marks,
+      });
+      const parts =
+        mode === 'every-n'
+          ? await splitPdfEveryNPages(bytes, Math.max(1, everyN))
+          : await (async () => {
+              const ranges = parsePageRanges(rangeSpec, state.pages.length);
+              return splitPdfByRanges(bytes, ranges);
+            })();
+
+      if (parts.length === 0) {
+        dispatch({ type: 'SET_ERROR', error: 'Nothing to split — check the page ranges.' });
+        return;
+      }
+      if (parts.length === 1) {
+        downloadBytes(parts[0], 'split-1.pdf');
+      } else {
+        const zip = createZip(parts.map((p, i) => ({ name: `split-${i + 1}.pdf`, data: p })));
+        downloadBytes(zip, 'split.zip', 'application/zip');
+      }
+      onClose();
+    } catch (err) {
+      dispatch({
+        type: 'SET_ERROR',
+        error: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const inputCls =
+    'rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-800';
+
+  return (
+    <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900/60">
+      <div className="flex flex-wrap items-end gap-4">
+        <div className="flex rounded-lg border border-slate-300 p-0.5 text-xs dark:border-slate-700">
+          <button
+            onClick={() => setMode('every-n')}
+            className={`rounded-md px-3 py-1.5 font-medium transition ${
+              mode === 'every-n' ? 'bg-indigo-500 text-white' : 'text-slate-500 dark:text-slate-300'
+            }`}
+          >
+            Every N pages
+          </button>
+          <button
+            onClick={() => setMode('ranges')}
+            className={`rounded-md px-3 py-1.5 font-medium transition ${
+              mode === 'ranges' ? 'bg-indigo-500 text-white' : 'text-slate-500 dark:text-slate-300'
+            }`}
+          >
+            Custom ranges
+          </button>
+        </div>
+
+        {mode === 'every-n' ? (
+          <label className="block">
+            <span className="mb-1 block text-xs text-slate-500 dark:text-slate-400">Pages per file</span>
+            <input
+              type="number"
+              min={1}
+              max={state.pages.length}
+              value={everyN}
+              onChange={(e) => setEveryN(Number(e.target.value) || 1)}
+              className={`w-24 ${inputCls}`}
+            />
+          </label>
+        ) : (
+          <label className="min-w-64 flex-1">
+            <span className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
+              Ranges (1-based, e.g. "1-3, 5, 8-9")
+            </span>
+            <input
+              value={rangeSpec}
+              onChange={(e) => setRangeSpec(e.target.value)}
+              placeholder={`1-${Math.min(3, state.pages.length)}, ${Math.min(state.pages.length, 4)}-${state.pages.length}`}
+              className={`w-full ${inputCls}`}
+            />
+          </label>
+        )}
+
+        <button
+          onClick={() => void run()}
+          disabled={busy || (mode === 'ranges' && !rangeSpec.trim())}
+          className="flex items-center gap-2 rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-indigo-500/25 transition hover:bg-indigo-400 disabled:opacity-50"
+        >
+          {busy ? <IconSpinner className="h-4 w-4" /> : <IconSplit className="h-4 w-4" />}
+          Split &amp; download
+        </button>
+        <button
+          onClick={onClose}
+          className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400"
+        >
+          Cancel
+        </button>
+      </div>
+      <p className="mt-3 text-xs text-slate-400 dark:text-slate-500">
+        Splits the document as it looks now (current order, edits and annotations included). One
+        output file downloads directly; two or more are bundled into a single <code>.zip</code>.
+      </p>
     </div>
   );
 }

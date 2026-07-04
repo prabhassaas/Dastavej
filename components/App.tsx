@@ -14,6 +14,7 @@ import CompressPanel from './CompressPanel';
 import MarksPanel from './MarksPanel';
 import OcrPanel from './OcrPanel';
 import AiPanel from './AiPanel';
+import ReadAloudPanel from './ReadAloudPanel';
 import ErrorToast from './ErrorToast';
 import SplashScreen from './SplashScreen';
 import { LogoMark } from './Logo';
@@ -31,6 +32,7 @@ import {
   IconShrink,
   IconSparkle,
   IconSun,
+  IconVolume,
 } from './Icons';
 
 const TABS: {
@@ -59,6 +61,7 @@ const TABS: {
   },
   { id: 'compress', label: 'Compress', icon: <IconShrink className="h-4 w-4" />, needsDoc: true },
   { id: 'ocr', label: 'OCR', icon: <IconScan className="h-4 w-4" />, needsDoc: true },
+  { id: 'voice', label: 'Read aloud', icon: <IconVolume className="h-4 w-4" />, needsDoc: true },
 ];
 
 function Workspace() {
@@ -159,6 +162,7 @@ function Workspace() {
               {state.tab === 'convert' && <ConvertPanel />}
               {state.tab === 'compress' && <CompressPanel />}
               {state.tab === 'ocr' && <OcrPanel />}
+              {state.tab === 'voice' && <ReadAloudPanel />}
             </>
           )}
         </main>

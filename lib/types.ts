@@ -10,7 +10,8 @@ export type Tab =
   | 'form'
   | 'ai'
   | 'compress'
-  | 'ocr';
+  | 'ocr'
+  | 'voice';
 
 /**
  * Page annotations (highlight, freehand ink, box, stamped image), stored in

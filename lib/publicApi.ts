@@ -19,10 +19,30 @@
  * examples for each function.
  */
 
-export { mergePdfs, reorderPages, extractPage, type PageOp } from './pdfOps';
+export {
+  mergePdfs,
+  reorderPages,
+  extractPage,
+  splitPdfByRanges,
+  splitPdfEveryNPages,
+  parsePageRanges,
+  type PageOp,
+  type PageRange,
+} from './pdfOps';
 export { compressPdf, type CompressResult } from './compress';
 export { printPdf } from './print';
 export { downloadBytes, formatBytes } from './download';
+export { createZip, type ZipEntry } from './zip';
+export { imagesToPdf, type PageFit } from './imageToPdf';
+export { pdfToImages, type PdfToImagesProgress } from './pdfToImages';
+export { flattenFormPdf } from './flatten';
+export {
+  isIndicVoice,
+  getVoices,
+  extractPageText,
+  extractAllText,
+  speak,
+} from './tts';
 
 export {
   openForConversion,
