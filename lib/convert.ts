@@ -27,8 +27,21 @@ interface Line {
   cells: string[];
 }
 
-/** Group a page's text items into visual lines (top → bottom, left → right). */
-async function extractLines(doc: PDFDocumentProxy, pageIndex: number): Promise<Line[]> {
+interface RowItem {
+  x: number;
+  str: string;
+}
+
+interface Row {
+  y: number;
+  /** dominant font size of the row, PDF units */
+  size: number;
+  /** items in x order */
+  items: RowItem[];
+}
+
+/** Extract a page's text items and group them into visual rows (top → bottom, left → right). */
+async function extractRows(doc: PDFDocumentProxy, pageIndex: number): Promise<Row[]> {
   const page = await doc.getPage(pageIndex + 1);
   const content = await page.getTextContent();
 
@@ -45,21 +58,85 @@ async function extractLines(doc: PDFDocumentProxy, pageIndex: number): Promise<L
     }))
     .sort((a, b) => b.y - a.y || a.x - b.x);
 
-  const lines: { y: number; size: number; parts: { x: number; str: string }[] }[] = [];
+  const rows: Row[] = [];
   for (const item of items) {
     const tolerance = Math.max(item.size * 0.5, 3);
-    const line = lines.find((l) => Math.abs(l.y - item.y) <= tolerance);
-    if (line) {
-      line.parts.push({ x: item.x, str: item.str });
-      line.size = Math.max(line.size, item.size);
+    const row = rows.find((r) => Math.abs(r.y - item.y) <= tolerance);
+    if (row) {
+      row.items.push({ x: item.x, str: item.str });
+      row.size = Math.max(row.size, item.size);
     } else {
-      lines.push({ y: item.y, size: item.size, parts: [{ x: item.x, str: item.str }] });
+      rows.push({ y: item.y, size: item.size, items: [{ x: item.x, str: item.str }] });
     }
   }
-  return lines.map((l) => ({
-    size: l.size,
-    cells: l.parts.sort((a, b) => a.x - b.x).map((p) => p.str),
-  }));
+  rows.forEach((r) => r.items.sort((a, b) => a.x - b.x));
+  return rows;
+}
+
+async function extractLines(doc: PDFDocumentProxy, pageIndex: number): Promise<Line[]> {
+  const rows = await extractRows(doc, pageIndex);
+  return rows.map((r) => ({ size: r.size, cells: r.items.map((it) => it.str) }));
+}
+
+function nearestClusterIndex(value: number, centers: number[]): number {
+  let best = 0;
+  let bestDist = Infinity;
+  centers.forEach((c, i) => {
+    const dist = Math.abs(c - value);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = i;
+    }
+  });
+  return best;
+}
+
+/**
+ * Infer a page's table columns from where text actually starts, then place
+ * every row's items into their matching column — so a blank cell in the
+ * source table (e.g. an unfilled "Middle name" field) stays blank instead of
+ * silently disappearing and shifting every later cell one column to the
+ * left (the bug with just joining each row's items left-to-right).
+ *
+ * A column only counts if its x-position recurs across at least two rows —
+ * a position used just once is treated as a stray word (e.g. justified
+ * prose, where extra word-spacing can split a line into several text runs),
+ * not a real table column, so plain paragraphs aren't shredded into cells.
+ */
+function buildColumnGrid(rows: Row[]): string[][] {
+  const isTabular = rows.filter((r) => r.items.length > 1).length >= 2;
+  if (!isTabular) {
+    return rows.map((r) => r.items.map((it) => it.str));
+  }
+
+  const tolerance = 10;
+  const sortedX = rows.flatMap((r) => r.items.map((it) => it.x)).sort((a, b) => a - b);
+  const clusters: number[][] = [];
+  for (const x of sortedX) {
+    const last = clusters[clusters.length - 1];
+    if (last && x - last[last.length - 1] <= tolerance) last.push(x);
+    else clusters.push([x]);
+  }
+  let centers = clusters.map((c) => c.reduce((a, b) => a + b, 0) / c.length);
+
+  const rowsPerCenter = centers.map(() => new Set<number>());
+  rows.forEach((row, ri) => {
+    row.items.forEach((it) => rowsPerCenter[nearestClusterIndex(it.x, centers)].add(ri));
+  });
+  const recurring = centers.filter((_, i) => rowsPerCenter[i].size >= 2);
+  if (recurring.length < 2) {
+    return rows.map((r) => r.items.map((it) => it.str));
+  }
+  centers = recurring;
+
+  return rows.map((row) => {
+    const cells = new Array<string>(centers.length).fill('');
+    for (const it of row.items) {
+      const idx = nearestClusterIndex(it.x, centers);
+      cells[idx] = cells[idx] ? `${cells[idx]} ${it.str}` : it.str;
+    }
+    return cells;
+  });
 }
 
 /** PDF → Word (.docx): one paragraph per visual line, page breaks preserved. */
@@ -113,11 +190,12 @@ export async function convertToExcel(
 
   const rows: string[][] = [];
   for (let i = 0; i < doc.numPages; i++) {
-    onProgress({ pageIndex: i, totalPages: doc.numPages, phase: 'Extracting text' });
-    const lines = await extractLines(doc, i);
+    onProgress({ pageIndex: i, totalPages: doc.numPages, phase: 'Detecting table columns' });
+    const pageRows = await extractRows(doc, i);
+    const grid = buildColumnGrid(pageRows);
     if (i > 0) rows.push([]);
     if (doc.numPages > 1) rows.push([`— Page ${i + 1} of ${doc.numPages} —`]);
-    rows.push(...(lines.length ? lines.map((l) => l.cells) : [['(no extractable text on this page)']]));
+    rows.push(...(grid.length ? grid : [['(no extractable text on this page)']]));
   }
 
   const ws = XLSX.utils.aoa_to_sheet(rows);

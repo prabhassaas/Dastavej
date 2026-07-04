@@ -36,7 +36,7 @@ const FORMATS: {
   {
     id: 'xlsx',
     name: 'Excel workbook',
-    desc: 'Every page\'s text flows into one worksheet, separated by "Page N" markers — ideal for tabular PDFs, and every page is visible without switching tabs.',
+    desc: 'Detects real table columns from text position and keeps blank cells blank, so nothing shifts left. Every page flows into one worksheet, separated by "Page N" markers.',
     badge: 'X',
     badgeClass: 'bg-emerald-600',
   },
