@@ -98,21 +98,31 @@ export async function convertToWord(
   return new Uint8Array(await blob.arrayBuffer());
 }
 
-/** PDF → Excel (.xlsx): one worksheet per page, text items become cells. */
+/**
+ * PDF → Excel (.xlsx): all pages flow into a single worksheet, separated by
+ * "Page N" marker rows. Pages used to each get their own worksheet, but most
+ * spreadsheet viewers open straight to the first tab without drawing
+ * attention to the others, so multi-page PDFs looked like only page 1 had
+ * converted. One continuous sheet is visible immediately, no tab-hunting.
+ */
 export async function convertToExcel(
   doc: PDFDocumentProxy,
   onProgress: (p: ConvertProgress) => void,
 ): Promise<Uint8Array> {
   const XLSX = await import('xlsx');
 
-  const wb = XLSX.utils.book_new();
+  const rows: string[][] = [];
   for (let i = 0; i < doc.numPages; i++) {
     onProgress({ pageIndex: i, totalPages: doc.numPages, phase: 'Extracting text' });
     const lines = await extractLines(doc, i);
-    const rows = lines.length ? lines.map((l) => l.cells) : [['(no extractable text on this page)']];
-    const ws = XLSX.utils.aoa_to_sheet(rows);
-    XLSX.utils.book_append_sheet(wb, ws, `Page ${i + 1}`);
+    if (i > 0) rows.push([]);
+    if (doc.numPages > 1) rows.push([`— Page ${i + 1} of ${doc.numPages} —`]);
+    rows.push(...(lines.length ? lines.map((l) => l.cells) : [['(no extractable text on this page)']]));
   }
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'PDF Text');
 
   const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer;
   return new Uint8Array(out);

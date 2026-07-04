@@ -36,7 +36,7 @@ const FORMATS: {
   {
     id: 'xlsx',
     name: 'Excel workbook',
-    desc: 'Each page becomes a worksheet; every text fragment becomes a cell — ideal for tabular PDFs.',
+    desc: 'Every page\'s text flows into one worksheet, separated by "Page N" markers — ideal for tabular PDFs, and every page is visible without switching tabs.',
     badge: 'X',
     badgeClass: 'bg-emerald-600',
   },
