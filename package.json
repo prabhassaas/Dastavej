@@ -1,6 +1,6 @@
 {
   "name": "dastavej",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "private": true,
   "description": "100% free, client-side PDF editor. All processing happens locally in your browser.",
   "exports": {

@@ -49,6 +49,7 @@ export {
   convertToWord,
   convertToExcel,
   convertToPowerPoint,
+  buildWordFromPages,
   CONVERT_MIME,
   type ConvertProgress,
 } from './convert';
@@ -73,7 +74,14 @@ export {
   type FormRow,
 } from './formData';
 
-export { ocrPdfBytes, type OcrProgress, type OcrResult } from './ocr';
+export {
+  ocrPdfBytes,
+  ocrImages,
+  createOcrEngine,
+  type OcrProgress,
+  type OcrResult,
+  type OcrEngine,
+} from './ocr';
 
 export { buildPdfFromMarkdown } from './mdPdf';
 

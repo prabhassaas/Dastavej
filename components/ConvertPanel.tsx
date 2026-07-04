@@ -60,7 +60,7 @@ const FORMATS: {
 export default function ConvertPanel() {
   const { state, dispatch } = usePdfStore();
   const [busy, setBusy] = useState<Format | null>(null);
-  const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
+  const [progress, setProgress] = useState<{ current: number; total: number; phase?: string } | null>(null);
   const [imgFormat, setImgFormat] = useState<'png' | 'jpeg'>('png');
 
   const baseName =
@@ -94,7 +94,8 @@ export default function ConvertPanel() {
         return;
       }
 
-      const onProgress = (p: ConvertProgress) => setProgress({ current: p.pageIndex + 1, total: p.totalPages });
+      const onProgress = (p: ConvertProgress) =>
+        setProgress({ current: p.pageIndex + 1, total: p.totalPages, phase: p.phase });
       const doc = await openForConversion(assembled);
       try {
         const bytes =
@@ -130,8 +131,13 @@ export default function ConvertPanel() {
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
               Convert the current working document ({state.pages.length} page
               {state.pages.length === 1 ? '' : 's'}) — generated locally in your browser, never
-              uploaded.
+              uploaded. Scanned pages with no text layer are OCR'd automatically.
             </p>
+            {busy && progress?.phase && (
+              <p className="mt-1 text-xs text-indigo-500 dark:text-indigo-300">
+                {progress.phase} ({progress.current}/{progress.total})…
+              </p>
+            )}
           </div>
 
           <div className="mt-4 space-y-4">

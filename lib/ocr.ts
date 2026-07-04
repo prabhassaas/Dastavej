@@ -30,6 +30,17 @@ async function renderEntryToCanvas(entry: PageEntry, scale = 3.5): Promise<HTMLC
   return canvas;
 }
 
+/** Decode an arbitrary image file (PNG/JPEG/etc.) onto a raster canvas for OCR. */
+async function imageToCanvas(bytes: Uint8Array, mime: string): Promise<HTMLCanvasElement> {
+  const bitmap = await createImageBitmap(new Blob([bytes.slice().buffer as ArrayBuffer], { type: mime }));
+  const canvas = document.createElement('canvas');
+  canvas.width = bitmap.width;
+  canvas.height = bitmap.height;
+  canvas.getContext('2d')!.drawImage(bitmap, 0, 0);
+  bitmap.close();
+  return canvas;
+}
+
 /**
  * Clean up a low-quality scan before recognition: grayscale + contrast
  * stretch + adaptive-ish threshold (Otsu). Helps faded photocopies and
@@ -75,38 +86,52 @@ function binarize(canvas: HTMLCanvasElement): void {
   ctx.putImageData(img, 0, 0);
 }
 
+export interface OcrEngine {
+  recognize(canvas: HTMLCanvasElement, enhance?: boolean): Promise<string>;
+  terminate(): Promise<void>;
+}
+
 /**
- * Run OCR over the given pages, fully client-side. tesseract.js spins up its
- * own Web Worker (and WASM core), so recognition never blocks the UI thread.
- * The English language model is fetched once from a CDN and cached by the
- * browser — no data from the document ever leaves the device.
+ * Spin up a tesseract.js Web Worker (WASM core + English model, all
+ * self-hosted static assets — no CDN). Shared by every OCR entry point below
+ * so the ~expensive worker/model load happens once per batch, not once per
+ * page/image. `onRecognizing` gets tesseract's own 0..1 progress per call.
+ */
+export async function createOcrEngine(onRecognizing?: (progress: number) => void): Promise<OcrEngine> {
+  const { createWorker } = await import('tesseract.js');
+  const worker = await createWorker('eng', 1, {
+    workerPath: '/tesseract/worker.min.js',
+    corePath: '/tesseract/core',
+    langPath: '/tesseract/lang',
+    logger: (m: { status: string; progress: number }) => {
+      if (m.status === 'recognizing text' && onRecognizing) onRecognizing(m.progress);
+    },
+  });
+  return {
+    async recognize(canvas, enhance) {
+      if (enhance) binarize(canvas);
+      const { data } = await worker.recognize(canvas);
+      return data.text.trim();
+    },
+    async terminate() {
+      await worker.terminate();
+    },
+  };
+}
+
+/**
+ * Run OCR over the given working-document pages, fully client-side. Your
+ * document is never uploaded anywhere.
  */
 export async function runOcr(
   entries: { entry: PageEntry; pageNumber: number }[],
   onProgress: (p: OcrProgress) => void,
   options: { enhance?: boolean } = {},
 ): Promise<OcrResult[]> {
-  const { createWorker } = await import('tesseract.js');
-
   let current = 0;
-  const worker = await createWorker('eng', 1, {
-    // Worker script, WASM core and the English model are all self-hosted
-    // static assets (copied from node_modules by scripts/copy-tesseract.mjs),
-    // so OCR works with no CDN or network access at all.
-    workerPath: '/tesseract/worker.min.js',
-    corePath: '/tesseract/core',
-    langPath: '/tesseract/lang',
-    logger: (m: { status: string; progress: number }) => {
-      if (m.status === 'recognizing text') {
-        onProgress({
-          pageIndex: current,
-          totalPages: entries.length,
-          phase: 'recognizing',
-          progress: m.progress,
-        });
-      }
-    },
-  });
+  const engine = await createOcrEngine((progress) =>
+    onProgress({ pageIndex: current, totalPages: entries.length, phase: 'recognizing', progress }),
+  );
 
   const results: OcrResult[] = [];
   try {
@@ -114,13 +139,12 @@ export async function runOcr(
       current = i;
       onProgress({ pageIndex: i, totalPages: entries.length, phase: 'render', progress: 0 });
       const canvas = await renderEntryToCanvas(entries[i].entry);
-      if (options.enhance) binarize(canvas);
-      const { data } = await worker.recognize(canvas);
-      results.push({ page: entries[i].pageNumber, text: data.text.trim() });
+      const text = await engine.recognize(canvas, options.enhance);
+      results.push({ page: entries[i].pageNumber, text });
       canvas.width = 0; // free the raster
     }
   } finally {
-    await worker.terminate();
+    await engine.terminate();
   }
   return results;
 }
@@ -138,18 +162,10 @@ export async function ocrPdfBytes(
   const doc = await pdfjs.getDocument({ data: bytes.slice() }).promise;
   const pageNumbers = options.pageNumbers ?? Array.from({ length: doc.numPages }, (_, i) => i + 1);
 
-  const { createWorker } = await import('tesseract.js');
   let current = 0;
-  const worker = await createWorker('eng', 1, {
-    workerPath: '/tesseract/worker.min.js',
-    corePath: '/tesseract/core',
-    langPath: '/tesseract/lang',
-    logger: (m: { status: string; progress: number }) => {
-      if (m.status === 'recognizing text') {
-        onProgress({ pageIndex: current, totalPages: pageNumbers.length, phase: 'recognizing', progress: m.progress });
-      }
-    },
-  });
+  const engine = await createOcrEngine((progress) =>
+    onProgress({ pageIndex: current, totalPages: pageNumbers.length, phase: 'recognizing', progress }),
+  );
 
   const results: OcrResult[] = [];
   try {
@@ -162,14 +178,43 @@ export async function ocrPdfBytes(
       canvas.width = Math.ceil(viewport.width);
       canvas.height = Math.ceil(viewport.height);
       await page.render({ canvas, viewport }).promise;
-      if (options.enhance) binarize(canvas);
-      const { data } = await worker.recognize(canvas);
-      results.push({ page: pageNumbers[i], text: data.text.trim() });
+      const text = await engine.recognize(canvas, options.enhance);
+      results.push({ page: pageNumbers[i], text });
       canvas.width = 0;
     }
   } finally {
-    await worker.terminate();
+    await engine.terminate();
     await doc.destroy();
+  }
+  return results;
+}
+
+/**
+ * OCR one or more standalone image files (photos of documents, screenshots,
+ * scans) directly — no PDF wrapping step required first.
+ */
+export async function ocrImages(
+  images: { name: string; bytes: Uint8Array; mime: string }[],
+  onProgress: (p: OcrProgress) => void = () => {},
+  options: { enhance?: boolean } = {},
+): Promise<{ name: string; text: string }[]> {
+  let current = 0;
+  const engine = await createOcrEngine((progress) =>
+    onProgress({ pageIndex: current, totalPages: images.length, phase: 'recognizing', progress }),
+  );
+
+  const results: { name: string; text: string }[] = [];
+  try {
+    for (let i = 0; i < images.length; i++) {
+      current = i;
+      onProgress({ pageIndex: i, totalPages: images.length, phase: 'render', progress: 0 });
+      const canvas = await imageToCanvas(images[i].bytes, images[i].mime);
+      const text = await engine.recognize(canvas, options.enhance);
+      results.push({ name: images[i].name, text });
+      canvas.width = 0;
+    }
+  } finally {
+    await engine.terminate();
   }
   return results;
 }

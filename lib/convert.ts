@@ -1,5 +1,6 @@
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { getPdfjs } from './pdfjs';
+import { createOcrEngine, type OcrEngine } from './ocr';
 
 /**
  * Client-side PDF → Office conversions. The assembled working document
@@ -139,7 +140,29 @@ function buildColumnGrid(rows: Row[]): string[][] {
   });
 }
 
-/** PDF → Word (.docx): one paragraph per visual line, page breaks preserved. */
+/** Render a pdf.js page to a raster canvas and OCR it into plain text lines. */
+async function ocrPageLines(doc: PDFDocumentProxy, pageIndex: number, engine: OcrEngine): Promise<string[]> {
+  const page = await doc.getPage(pageIndex + 1);
+  const viewport = page.getViewport({ scale: 3.5 });
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.ceil(viewport.width);
+  canvas.height = Math.ceil(viewport.height);
+  await page.render({ canvas, viewport }).promise;
+  const text = await engine.recognize(canvas, true);
+  canvas.width = 0;
+  return text
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+}
+
+/**
+ * PDF → Word (.docx): one paragraph per visual line, page breaks preserved.
+ * Scanned pages have no text layer at all (`extractLines` comes back empty),
+ * so those pages are OCR'd on the fly with tesseract.js instead of being
+ * silently dropped from the output — the OCR engine is only spun up the
+ * first time it's actually needed.
+ */
 export async function convertToWord(
   doc: PDFDocumentProxy,
   onProgress: (p: ConvertProgress) => void,
@@ -147,29 +170,67 @@ export async function convertToWord(
   const { Document, Packer, Paragraph, TextRun } = await import('docx');
 
   const children: InstanceType<typeof Paragraph>[] = [];
-  for (let i = 0; i < doc.numPages; i++) {
-    onProgress({ pageIndex: i, totalPages: doc.numPages, phase: 'Extracting text' });
-    const lines = await extractLines(doc, i);
-    lines.forEach((line, li) => {
+  let ocrEngine: OcrEngine | null = null;
+  try {
+    for (let i = 0; i < doc.numPages; i++) {
+      onProgress({ pageIndex: i, totalPages: doc.numPages, phase: 'Extracting text' });
+      let lines = await extractLines(doc, i);
+      if (lines.length === 0) {
+        onProgress({ pageIndex: i, totalPages: doc.numPages, phase: 'Recognizing scanned page (OCR)' });
+        ocrEngine ??= await createOcrEngine();
+        lines = (await ocrPageLines(doc, i, ocrEngine)).map((text) => ({ size: 12, cells: [text] }));
+      }
+      lines.forEach((line, li) => {
+        children.push(
+          new Paragraph({
+            pageBreakBefore: i > 0 && li === 0,
+            children: [
+              new TextRun({
+                text: line.cells.join(' '),
+                // docx sizes are half-points; keep the PDF's visual hierarchy.
+                size: Math.max(Math.round(line.size) * 2, 16),
+                bold: line.size >= 16,
+              }),
+            ],
+          }),
+        );
+      });
+      if (lines.length === 0 && i > 0) {
+        children.push(new Paragraph({ pageBreakBefore: true, children: [] }));
+      }
+    }
+  } finally {
+    if (ocrEngine) await ocrEngine.terminate();
+  }
+
+  const out = new Document({ sections: [{ children }] });
+  const blob = await Packer.toBlob(out);
+  return new Uint8Array(await blob.arrayBuffer());
+}
+
+/**
+ * Build a plain, editable Word document straight from extracted/OCR'd text —
+ * one entry per page or image. Used by the OCR tab's "Download as Word"
+ * action so scanned documents and standalone images both end up as an
+ * editable file, not just a flat .txt dump.
+ */
+export async function buildWordFromPages(pages: string[]): Promise<Uint8Array> {
+  const { Document, Packer, Paragraph, TextRun } = await import('docx');
+  const children: InstanceType<typeof Paragraph>[] = [];
+  pages.forEach((text, pi) => {
+    const lines = text
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean);
+    (lines.length ? lines : ['']).forEach((line, li) => {
       children.push(
         new Paragraph({
-          pageBreakBefore: i > 0 && li === 0,
-          children: [
-            new TextRun({
-              text: line.cells.join(' '),
-              // docx sizes are half-points; keep the PDF's visual hierarchy.
-              size: Math.max(Math.round(line.size) * 2, 16),
-              bold: line.size >= 16,
-            }),
-          ],
+          pageBreakBefore: pi > 0 && li === 0,
+          children: [new TextRun({ text: line, size: 24 })],
         }),
       );
     });
-    if (lines.length === 0 && i > 0) {
-      children.push(new Paragraph({ pageBreakBefore: true, children: [] }));
-    }
-  }
-
+  });
   const out = new Document({ sections: [{ children }] });
   const blob = await Packer.toBlob(out);
   return new Uint8Array(await blob.arrayBuffer());
@@ -189,13 +250,25 @@ export async function convertToExcel(
   const XLSX = await import('xlsx');
 
   const rows: string[][] = [];
-  for (let i = 0; i < doc.numPages; i++) {
-    onProgress({ pageIndex: i, totalPages: doc.numPages, phase: 'Detecting table columns' });
-    const pageRows = await extractRows(doc, i);
-    const grid = buildColumnGrid(pageRows);
-    if (i > 0) rows.push([]);
-    if (doc.numPages > 1) rows.push([`— Page ${i + 1} of ${doc.numPages} —`]);
-    rows.push(...(grid.length ? grid : [['(no extractable text on this page)']]));
+  let ocrEngine: OcrEngine | null = null;
+  try {
+    for (let i = 0; i < doc.numPages; i++) {
+      onProgress({ pageIndex: i, totalPages: doc.numPages, phase: 'Detecting table columns' });
+      const pageRows = await extractRows(doc, i);
+      let grid: string[][];
+      if (pageRows.length === 0) {
+        onProgress({ pageIndex: i, totalPages: doc.numPages, phase: 'Recognizing scanned page (OCR)' });
+        ocrEngine ??= await createOcrEngine();
+        grid = (await ocrPageLines(doc, i, ocrEngine)).map((text) => [text]);
+      } else {
+        grid = buildColumnGrid(pageRows);
+      }
+      if (i > 0) rows.push([]);
+      if (doc.numPages > 1) rows.push([`— Page ${i + 1} of ${doc.numPages} —`]);
+      rows.push(...(grid.length ? grid : [['(no extractable text on this page)']]));
+    }
+  } finally {
+    if (ocrEngine) await ocrEngine.terminate();
   }
 
   const ws = XLSX.utils.aoa_to_sheet(rows);

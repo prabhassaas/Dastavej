@@ -60,7 +60,7 @@ const TABS: {
       'AI features are paused while we build local, on-device AI support — coming soon.',
   },
   { id: 'compress', label: 'Compress', icon: <IconShrink className="h-4 w-4" />, needsDoc: true },
-  { id: 'ocr', label: 'OCR', icon: <IconScan className="h-4 w-4" />, needsDoc: true },
+  { id: 'ocr', label: 'OCR', icon: <IconScan className="h-4 w-4" />, needsDoc: false },
   { id: 'voice', label: 'Read aloud', icon: <IconVolume className="h-4 w-4" />, needsDoc: true },
 ];
 
@@ -150,6 +150,8 @@ function Workspace() {
             <FormWizard />
           ) : state.tab === 'ai' ? (
             <AiPanel />
+          ) : state.tab === 'ocr' ? (
+            <OcrPanel />
           ) : !hasDocument ? (
             <DropZone fullScreen />
           ) : (
@@ -161,7 +163,6 @@ function Workspace() {
               {state.tab === 'organize' && <PageOrganizer />}
               {state.tab === 'convert' && <ConvertPanel />}
               {state.tab === 'compress' && <CompressPanel />}
-              {state.tab === 'ocr' && <OcrPanel />}
               {state.tab === 'voice' && <ReadAloudPanel />}
             </>
           )}
