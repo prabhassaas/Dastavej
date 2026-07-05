@@ -5,7 +5,21 @@ import { usePdfStore } from '@/lib/store';
 import { runOcr, ocrImages, type OcrResult } from '@/lib/ocr';
 import { buildWordFromPages } from '@/lib/convert';
 import { downloadBytes } from '@/lib/download';
-import { IconDownload, IconImage, IconPlus, IconScan, IconSpinner, IconX } from './Icons';
+import { improveOcrText, isAiConfigured, loadAiSettings } from '@/lib/ai';
+import { IconDownload, IconImage, IconPlus, IconScan, IconSparkle, IconSpinner, IconX } from './Icons';
+
+/** Runs the AI cleanup pass over each item's text in turn, reporting progress. */
+async function improveAllWithAi<T extends { text: string }>(
+  items: T[],
+  onProgress: (i: number, total: number) => void,
+): Promise<T[]> {
+  const out: T[] = [];
+  for (let i = 0; i < items.length; i++) {
+    onProgress(i, items.length);
+    out.push({ ...items[i], text: await improveOcrText(items[i].text) });
+  }
+  return out;
+}
 
 /**
  * Client-side OCR: pages are rasterized to a canvas with pdf.js and handed to
@@ -20,6 +34,27 @@ export default function OcrPanel() {
   const [results, setResults] = useState<OcrResult[]>([]);
   const [copied, setCopied] = useState(false);
   const [enhance, setEnhance] = useState(false);
+  const [improving, setImproving] = useState(false);
+  const aiConfigured = isAiConfigured(loadAiSettings());
+
+  const improveWithAi = async () => {
+    setImproving(true);
+    try {
+      const improved = await improveAllWithAi(results, (i, total) =>
+        setStatus(`Improving with AI — page ${i + 1}/${total}…`),
+      );
+      setResults(improved);
+      setStatus('');
+    } catch (err) {
+      dispatch({
+        type: 'SET_ERROR',
+        error: `AI cleanup failed: ${err instanceof Error ? err.message : String(err)}`,
+      });
+      setStatus('');
+    } finally {
+      setImproving(false);
+    }
+  };
 
   const run = async (all: boolean) => {
     setRunning(true);
@@ -124,6 +159,11 @@ export default function OcrPanel() {
                 Enhance low-quality scan (grayscale + auto-threshold) — turn on for faded
                 photocopies and phone photos; leave off for clean digital PDFs
               </label>
+              <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                Tip for the most accurate result: enable Enhance for photos/faded scans, then run
+                the "Improve with AI" pass below to catch remaining recognition errors — no OCR
+                engine is 100% precise on its own.
+              </p>
 
               {results.length > 0 && (
                 <>
@@ -133,6 +173,15 @@ export default function OcrPanel() {
                       className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs hover:border-slate-500 dark:border-slate-600 dark:text-slate-200 dark:hover:border-slate-400"
                     >
                       {copied ? 'Copied!' : 'Copy all'}
+                    </button>
+                    <button
+                      onClick={() => void improveWithAi()}
+                      disabled={improving || !aiConfigured}
+                      title={aiConfigured ? undefined : 'Configure an AI provider in the AI tab first'}
+                      className="flex items-center gap-1.5 rounded-lg border border-indigo-300 px-3 py-1.5 text-xs text-indigo-600 hover:border-indigo-400 disabled:opacity-40 dark:border-indigo-700 dark:text-indigo-300"
+                    >
+                      {improving ? <IconSpinner className="h-3.5 w-3.5" /> : <IconSparkle className="h-3.5 w-3.5" />}
+                      Improve with AI
                     </button>
                     <button
                       onClick={() =>
@@ -191,7 +240,28 @@ function ImageOcrTool() {
   const [status, setStatus] = useState('');
   const [results, setResults] = useState<{ name: string; text: string }[]>([]);
   const [copied, setCopied] = useState(false);
+  const [improving, setImproving] = useState(false);
+  const aiConfigured = isAiConfigured(loadAiSettings());
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const improveWithAi = async () => {
+    setImproving(true);
+    try {
+      const improved = await improveAllWithAi(results, (i, total) =>
+        setStatus(`Improving with AI — ${i + 1}/${total}…`),
+      );
+      setResults(improved);
+      setStatus('');
+    } catch (err) {
+      dispatch({
+        type: 'SET_ERROR',
+        error: `AI cleanup failed: ${err instanceof Error ? err.message : String(err)}`,
+      });
+      setStatus('');
+    } finally {
+      setImproving(false);
+    }
+  };
 
   const addFiles = (list: FileList) => {
     const picked = Array.from(list).filter((f) => f.type === 'image/png' || f.type === 'image/jpeg');
@@ -325,6 +395,10 @@ function ImageOcrTool() {
           />
           Enhance (grayscale + auto-threshold) — recommended for phone photos
         </label>
+        <p className="text-[11px] text-slate-400 dark:text-slate-500">
+          Tip for the most accurate result: keep Enhance on for phone photos, then run "Improve
+          with AI" below to catch remaining recognition errors.
+        </p>
 
         <div className="flex items-center gap-3">
           <button
@@ -346,6 +420,15 @@ function ImageOcrTool() {
                 className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs hover:border-slate-500 dark:border-slate-600 dark:text-slate-200 dark:hover:border-slate-400"
               >
                 {copied ? 'Copied!' : 'Copy all'}
+              </button>
+              <button
+                onClick={() => void improveWithAi()}
+                disabled={improving || !aiConfigured}
+                title={aiConfigured ? undefined : 'Configure an AI provider in the AI tab first'}
+                className="flex items-center gap-1.5 rounded-lg border border-indigo-300 px-3 py-1.5 text-xs text-indigo-600 hover:border-indigo-400 disabled:opacity-40 dark:border-indigo-700 dark:text-indigo-300"
+              >
+                {improving ? <IconSpinner className="h-3.5 w-3.5" /> : <IconSparkle className="h-3.5 w-3.5" />}
+                Improve with AI
               </button>
               <button
                 onClick={() =>

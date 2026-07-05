@@ -48,6 +48,7 @@ export {
   openForConversion,
   convertToWord,
   convertToExcel,
+  convertToCsv,
   convertToPowerPoint,
   buildWordFromPages,
   CONVERT_MIME,

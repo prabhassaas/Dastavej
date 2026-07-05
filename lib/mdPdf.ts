@@ -101,6 +101,13 @@ export async function buildPdfFromMarkdown(title: string, markdown: string): Pro
     page.drawText(line, { x: MARGIN, y: y - 24, size: 24, font: bold, color: body });
     y -= 32;
   }
+  const dateLabel = new Date().toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+  page.drawText(dateLabel, { x: MARGIN, y: y - 8, size: 9.5, font, color: gray });
+  y -= 18;
   page.drawLine({
     start: { x: MARGIN, y: y - 4 },
     end: { x: PAGE_W - MARGIN, y: y - 4 },

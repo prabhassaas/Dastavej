@@ -6,9 +6,13 @@ import { usePdfStore } from '@/lib/store';
 import {
   AI_PRESETS,
   aiChat,
+  isAiConfigured,
   loadAiSettings,
+  parseAiSettingsFile,
   parseJsonReply,
+  PROFESSIONAL_STYLE_INSTRUCTION,
   saveAiSettings,
+  serializeAiSettings,
   type AiSettings,
 } from '@/lib/ai';
 import { buildPdfFromMarkdown } from '@/lib/mdPdf';
@@ -32,12 +36,39 @@ export default function AiPanel() {
   const [settings, setSettings] = useState<AiSettings>({ endpoint: '', apiKey: '', model: '' });
   const [settingsMsg, setSettingsMsg] = useState('');
   const [testing, setTesting] = useState(false);
-  useEffect(() => setSettings(loadAiSettings()), []);
+  // Collapsed by default once a config already exists, so daily use doesn't
+  // show the endpoint/key fields on every visit — expand any time via "Edit".
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const importRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const loaded = loadAiSettings();
+    setSettings(loaded);
+    setSettingsOpen(!isAiConfigured(loaded));
+  }, []);
 
   const persist = (patch: Partial<AiSettings>) => {
     const next = { ...settings, ...patch };
     setSettings(next);
     saveAiSettings(next);
+  };
+
+  const exportConfig = () => {
+    downloadBytes(
+      new TextEncoder().encode(serializeAiSettings(settings)),
+      'dastavej-ai-config.json',
+      'application/json',
+    );
+  };
+
+  const importConfig = async (file: File) => {
+    try {
+      const next = parseAiSettingsFile(await file.text());
+      setSettings(next);
+      saveAiSettings(next);
+      setSettingsMsg('✓ Config imported.');
+    } catch {
+      dispatch({ type: 'SET_ERROR', error: 'That file is not a valid Dastavej AI config export.' });
+    }
   };
 
   const testConnection = async () => {
@@ -78,7 +109,8 @@ export default function AiPanel() {
             {
               role: 'system',
               content:
-                'You are a meticulous researcher. Reply ONLY with JSON: {"title": string, "sections": string[]} — 5 to 8 section titles that together cover the topic deeply (fundamentals, current state, data/examples, controversies, practical guidance, outlook).',
+                'You are a meticulous researcher. Reply ONLY with JSON: {"title": string, "sections": string[]} — 5 to 8 section titles that together cover the topic deeply (fundamentals, current state, data/examples, controversies, practical guidance, outlook).' +
+                ` ${PROFESSIONAL_STYLE_INSTRUCTION}`,
             },
             { role: 'user', content: `Topic: ${topic}` },
           ],
@@ -95,7 +127,8 @@ export default function AiPanel() {
               {
                 role: 'system',
                 content:
-                  'Write one section of a professional report in Markdown. Start with "## <section title>". 250–450 words. Use concrete facts, numbers and examples where possible; bullet lists where they help. No preamble, no closing remarks about the report itself.',
+                  'Write one section of a professional report in Markdown. Start with "## <section title>". 250–450 words. Use concrete facts, numbers and examples where possible; bullet lists where they help. No preamble, no closing remarks about the report itself.' +
+                  ` ${PROFESSIONAL_STYLE_INSTRUCTION}`,
               },
               {
                 role: 'user',
@@ -114,7 +147,8 @@ export default function AiPanel() {
             {
               role: 'system',
               content:
-                'Write a well-structured, factual document in Markdown with ## section headings and bullet lists where useful. 600–900 words. No preamble.',
+                'Write a well-structured, factual document in Markdown with ## section headings and bullet lists where useful. 600–900 words. No preamble.' +
+                ` ${PROFESSIONAL_STYLE_INSTRUCTION}`,
             },
             { role: 'user', content: `Topic: ${topic}` },
           ],
@@ -230,82 +264,142 @@ export default function AiPanel() {
           </p>
         </div>
 
-        {/* Provider settings */}
+        {/* Provider settings — collapsed to a one-line summary once configured,
+            so the endpoint/key fields aren't on display every visit. */}
         <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900/60">
-          <p className="text-sm font-semibold">Provider settings</p>
-          <div className="flex flex-wrap gap-2">
-            {AI_PRESETS.map((p) => (
+          {!settingsOpen && isAiConfigured(settings) ? (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="flex items-center gap-2 text-sm">
+                <span className="text-emerald-600 dark:text-emerald-400">✓ AI configured</span>
+                <span className="text-slate-400 dark:text-slate-500">
+                  {settings.model} @ {settings.endpoint}
+                </span>
+              </p>
               <button
-                key={p.name}
-                onClick={() => persist({ endpoint: p.endpoint })}
-                title={p.note}
-                className={`rounded-full border px-3 py-1 text-xs transition ${
-                  settings.endpoint === p.endpoint
-                    ? 'border-indigo-400 bg-indigo-500/10 text-indigo-600 dark:text-indigo-300'
-                    : 'border-slate-300 text-slate-500 hover:border-indigo-300 dark:border-slate-700 dark:text-slate-400'
-                }`}
+                onClick={() => setSettingsOpen(true)}
+                className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs hover:border-indigo-400 dark:border-slate-700"
               >
-                {p.name}
-              </button>
-            ))}
-          </div>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <label className="block sm:col-span-2">
-              <span className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
-                Endpoint (OpenAI-compatible, ends in /v1)
-              </span>
-              <input
-                value={settings.endpoint}
-                onChange={(e) => persist({ endpoint: e.target.value })}
-                placeholder="http://localhost:11434/v1"
-                className={`w-full ${inputCls}`}
-              />
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-xs text-slate-500 dark:text-slate-400">Model</span>
-              <input
-                value={settings.model}
-                onChange={(e) => persist({ model: e.target.value })}
-                placeholder="llama3.1"
-                className={`w-full ${inputCls}`}
-              />
-            </label>
-            <label className="block sm:col-span-2">
-              <span className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
-                API key (leave empty for local models)
-              </span>
-              <input
-                type="password"
-                value={settings.apiKey}
-                onChange={(e) => persist({ apiKey: e.target.value })}
-                placeholder="sk-…"
-                className={`w-full ${inputCls}`}
-              />
-            </label>
-            <div className="flex items-end">
-              <button
-                onClick={() => void testConnection()}
-                disabled={testing}
-                className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm transition hover:border-indigo-400 disabled:opacity-50 dark:border-slate-700"
-              >
-                {testing && <IconSpinner className="h-4 w-4" />}
-                Test connection
+                Edit
               </button>
             </div>
-          </div>
-          {settingsMsg && (
-            <p className={`text-xs ${settingsMsg.startsWith('✓') ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}`}>
-              {settingsMsg}
-            </p>
+          ) : (
+            <>
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold">Provider settings</p>
+                {isAiConfigured(settings) && (
+                  <button
+                    onClick={() => setSettingsOpen(false)}
+                    className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                  >
+                    Collapse
+                  </button>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {AI_PRESETS.map((p) => (
+                  <button
+                    key={p.name}
+                    onClick={() => persist({ endpoint: p.endpoint })}
+                    title={p.note}
+                    className={`rounded-full border px-3 py-1 text-xs transition ${
+                      settings.endpoint === p.endpoint
+                        ? 'border-indigo-400 bg-indigo-500/10 text-indigo-600 dark:text-indigo-300'
+                        : 'border-slate-300 text-slate-500 hover:border-indigo-300 dark:border-slate-700 dark:text-slate-400'
+                    }`}
+                  >
+                    {p.name}
+                  </button>
+                ))}
+              </div>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <label className="block sm:col-span-2">
+                  <span className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
+                    Endpoint (OpenAI-compatible, ends in /v1)
+                  </span>
+                  <input
+                    value={settings.endpoint}
+                    onChange={(e) => persist({ endpoint: e.target.value })}
+                    placeholder="http://localhost:11434/v1"
+                    className={`w-full ${inputCls}`}
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-xs text-slate-500 dark:text-slate-400">Model</span>
+                  <input
+                    value={settings.model}
+                    onChange={(e) => persist({ model: e.target.value })}
+                    placeholder="llama3.1"
+                    className={`w-full ${inputCls}`}
+                  />
+                </label>
+                <label className="block sm:col-span-2">
+                  <span className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
+                    API key (leave empty for local models)
+                  </span>
+                  <input
+                    type="password"
+                    value={settings.apiKey}
+                    onChange={(e) => persist({ apiKey: e.target.value })}
+                    placeholder="sk-…"
+                    className={`w-full ${inputCls}`}
+                  />
+                </label>
+                <div className="flex items-end">
+                  <button
+                    onClick={() => void testConnection()}
+                    disabled={testing}
+                    className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm transition hover:border-indigo-400 disabled:opacity-50 dark:border-slate-700"
+                  >
+                    {testing && <IconSpinner className="h-4 w-4" />}
+                    Test connection
+                  </button>
+                </div>
+              </div>
+              {settingsMsg && (
+                <p className={`text-xs ${settingsMsg.startsWith('✓') ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}`}>
+                  {settingsMsg}
+                </p>
+              )}
+              <div className="flex flex-wrap items-center gap-3 border-t border-slate-100 pt-3 dark:border-slate-800">
+                <button
+                  onClick={exportConfig}
+                  disabled={!isAiConfigured(settings)}
+                  className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs hover:border-indigo-400 disabled:opacity-40 dark:border-slate-700"
+                >
+                  Export config (backup)
+                </button>
+                <button
+                  onClick={() => importRef.current?.click()}
+                  className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs hover:border-indigo-400 dark:border-slate-700"
+                >
+                  Import config
+                </button>
+                <input
+                  ref={importRef}
+                  type="file"
+                  accept="application/json,.json"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) void importConfig(f);
+                    e.target.value = '';
+                  }}
+                />
+                <span className="text-[11px] text-slate-400 dark:text-slate-500">
+                  Settings (including the key) live only in this browser's storage — export a
+                  backup before clearing site data, since that wipes it for good.
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                Using a local model? The server must allow requests from this page's origin
+                (CORS), or the browser will silently block the call. For Ollama, start it with{' '}
+                <code className="rounded bg-slate-100 px-1 py-0.5 dark:bg-slate-800">
+                  OLLAMA_ORIGINS=* ollama serve
+                </code>
+                .
+              </p>
+            </>
           )}
-          <p className="text-[11px] text-slate-400 dark:text-slate-500">
-            Using a local model? The server must allow requests from this page's origin (CORS),
-            or the browser will silently block the call. For Ollama, start it with{' '}
-            <code className="rounded bg-slate-100 px-1 py-0.5 dark:bg-slate-800">
-              OLLAMA_ORIGINS=* ollama serve
-            </code>
-            .
-          </p>
         </div>
 
         {/* Topic → PDF */}

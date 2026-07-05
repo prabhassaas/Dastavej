@@ -57,6 +57,45 @@ export function saveAiSettings(settings: AiSettings): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
 }
 
+/** True once endpoint + model are both filled in — "ready to use" settings. */
+export function isAiConfigured(settings: AiSettings): boolean {
+  return Boolean(settings.endpoint.trim() && settings.model.trim());
+}
+
+/**
+ * Back up the provider settings (including the API key) to a small JSON
+ * file. localStorage is the only place these live, so an explicit "clear
+ * cookies and site data" in the browser wipes them for good — that's the
+ * browser doing exactly what the user asked, and no client-side app should
+ * try to defeat it. This is the honest mitigation: a one-file backup the
+ * user controls, so restoring after a real wipe is a re-import, not
+ * retyping a key from memory.
+ */
+export function serializeAiSettings(settings: AiSettings): string {
+  return JSON.stringify(settings, null, 2);
+}
+
+export function parseAiSettingsFile(text: string): AiSettings {
+  const parsed = JSON.parse(text);
+  return {
+    endpoint: typeof parsed.endpoint === 'string' ? parsed.endpoint : '',
+    apiKey: typeof parsed.apiKey === 'string' ? parsed.apiKey : '',
+    model: typeof parsed.model === 'string' ? parsed.model : '',
+  };
+}
+
+/**
+ * Folded into every generation prompt so output defaults to a polished,
+ * presentation-ready bar even when the user's topic/prompt says nothing
+ * about style — "write about X" should still come back looking like
+ * something you'd hand to a client, not a rough draft.
+ */
+export const PROFESSIONAL_STYLE_INSTRUCTION =
+  'Regardless of how the request is phrased, write and structure this at a market-ready, ' +
+  'professional-presentation standard by default: clear hierarchy, confident and precise ' +
+  'language, concrete facts/data/examples over vague filler, and section headings that read ' +
+  'like a polished business report or client deck rather than a rough draft.';
+
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
   content: string;
@@ -100,6 +139,33 @@ export async function aiChat(messages: ChatMessage[], signal?: AbortSignal): Pro
   const content = data?.choices?.[0]?.message?.content;
   if (typeof content !== 'string') throw new Error('AI endpoint returned no content.');
   return content;
+}
+
+/**
+ * Ask the configured model to fix obvious OCR mistakes (misrecognized
+ * characters, wrongly split/joined words, stray artifacts) in a block of raw
+ * tesseract.js output, preserving the original wording and line structure as
+ * closely as possible. Used by the OCR tab's optional "Improve with AI" step
+ * — tesseract does the recognition, the LLM does the cleanup pass.
+ */
+export async function improveOcrText(rawText: string, signal?: AbortSignal): Promise<string> {
+  if (!rawText.trim()) return rawText;
+  const reply = await aiChat(
+    [
+      {
+        role: 'system',
+        content:
+          'You are given raw OCR output that may contain misrecognized characters, wrongly ' +
+          'split or joined words, stray line breaks and scanning artifacts. Correct obvious OCR ' +
+          'errors while preserving the original meaning, wording and line/paragraph structure as ' +
+          'closely as possible. Reply with ONLY the corrected text — no preamble, no commentary, ' +
+          'no markdown fences, no added or removed content beyond fixing recognition errors.',
+      },
+      { role: 'user', content: rawText },
+    ],
+    signal,
+  );
+  return reply.trim();
 }
 
 /** Extract a JSON object from a model reply that may be fenced or chatty. */

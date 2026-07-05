@@ -237,18 +237,14 @@ export async function buildWordFromPages(pages: string[]): Promise<Uint8Array> {
 }
 
 /**
- * PDF → Excel (.xlsx): all pages flow into a single worksheet, separated by
- * "Page N" marker rows. Pages used to each get their own worksheet, but most
- * spreadsheet viewers open straight to the first tab without drawing
- * attention to the others, so multi-page PDFs looked like only page 1 had
- * converted. One continuous sheet is visible immediately, no tab-hunting.
+ * Shared by Excel and CSV export: all pages flow into one continuous table,
+ * separated by "Page N" marker rows, with real table columns inferred per
+ * page (see buildColumnGrid) and scanned pages OCR'd on the fly.
  */
-export async function convertToExcel(
+async function buildTableRows(
   doc: PDFDocumentProxy,
   onProgress: (p: ConvertProgress) => void,
-): Promise<Uint8Array> {
-  const XLSX = await import('xlsx');
-
+): Promise<string[][]> {
   const rows: string[][] = [];
   let ocrEngine: OcrEngine | null = null;
   try {
@@ -270,6 +266,22 @@ export async function convertToExcel(
   } finally {
     if (ocrEngine) await ocrEngine.terminate();
   }
+  return rows;
+}
+
+/**
+ * PDF → Excel (.xlsx): all pages flow into a single worksheet, separated by
+ * "Page N" marker rows. Pages used to each get their own worksheet, but most
+ * spreadsheet viewers open straight to the first tab without drawing
+ * attention to the others, so multi-page PDFs looked like only page 1 had
+ * converted. One continuous sheet is visible immediately, no tab-hunting.
+ */
+export async function convertToExcel(
+  doc: PDFDocumentProxy,
+  onProgress: (p: ConvertProgress) => void,
+): Promise<Uint8Array> {
+  const XLSX = await import('xlsx');
+  const rows = await buildTableRows(doc, onProgress);
 
   const ws = XLSX.utils.aoa_to_sheet(rows);
   const wb = XLSX.utils.book_new();
@@ -277,6 +289,22 @@ export async function convertToExcel(
 
   const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer;
   return new Uint8Array(out);
+}
+
+/**
+ * PDF → CSV: the same column-aware table extraction as Excel, written as a
+ * single plain-text CSV instead of a workbook — handy for quick imports into
+ * tools that don't want a full .xlsx.
+ */
+export async function convertToCsv(
+  doc: PDFDocumentProxy,
+  onProgress: (p: ConvertProgress) => void,
+): Promise<Uint8Array> {
+  const XLSX = await import('xlsx');
+  const rows = await buildTableRows(doc, onProgress);
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  const csv = XLSX.utils.sheet_to_csv(ws);
+  return new TextEncoder().encode(csv);
 }
 
 /** PDF → PowerPoint (.pptx): each page becomes a full-bleed slide image. */
@@ -318,4 +346,5 @@ export const CONVERT_MIME = {
   docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  csv: 'text/csv',
 } as const;

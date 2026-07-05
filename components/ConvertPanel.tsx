@@ -4,6 +4,7 @@ import { useRef, useState } from 'react';
 import { usePdfStore } from '@/lib/store';
 import {
   CONVERT_MIME,
+  convertToCsv,
   convertToExcel,
   convertToPowerPoint,
   convertToWord,
@@ -17,7 +18,7 @@ import { imagesToPdf } from '@/lib/imageToPdf';
 import { createZip } from '@/lib/zip';
 import { IconConvert, IconImage, IconPlus, IconSpinner, IconX } from './Icons';
 
-type Format = 'docx' | 'xlsx' | 'pptx' | 'images';
+type Format = 'docx' | 'xlsx' | 'csv' | 'pptx' | 'images';
 
 const FORMATS: {
   id: Format;
@@ -41,6 +42,13 @@ const FORMATS: {
     badgeClass: 'bg-emerald-600',
   },
   {
+    id: 'csv',
+    name: 'CSV file',
+    desc: 'Same column-aware table detection as Excel, written as a single plain-text .csv — quick to import anywhere.',
+    badge: 'CSV',
+    badgeClass: 'bg-teal-600',
+  },
+  {
     id: 'pptx',
     name: 'PowerPoint deck',
     desc: 'Each page becomes a full-bleed slide with a crisp render of the original, keeping the exact layout.',
@@ -55,6 +63,14 @@ const FORMATS: {
     badgeClass: 'bg-pink-600',
   },
 ];
+
+const FORMAT_LABELS: Record<Format, string> = {
+  docx: 'Word',
+  xlsx: 'Excel',
+  csv: 'CSV',
+  pptx: 'PPT',
+  images: 'Images',
+};
 
 /** PDF ↔ Office/Images conversion, all in-browser. */
 export default function ConvertPanel() {
@@ -103,7 +119,9 @@ export default function ConvertPanel() {
             ? await convertToWord(doc, onProgress)
             : format === 'xlsx'
               ? await convertToExcel(doc, onProgress)
-              : await convertToPowerPoint(doc, onProgress);
+              : format === 'csv'
+                ? await convertToCsv(doc, onProgress)
+                : await convertToPowerPoint(doc, onProgress);
         downloadBytes(bytes, `${baseName}.${format}`, CONVERT_MIME[format]);
       } finally {
         void doc.destroy();
@@ -190,7 +208,7 @@ export default function ConvertPanel() {
                   ) : (
                     <>
                       Convert to{' '}
-                      {f.id === 'docx' ? 'Word' : f.id === 'xlsx' ? 'Excel' : f.id === 'pptx' ? 'PPT' : 'Images'}
+                      {FORMAT_LABELS[f.id]}
                     </>
                   )}
                 </button>
