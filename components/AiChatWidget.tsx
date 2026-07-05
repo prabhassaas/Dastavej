@@ -7,6 +7,9 @@ import { buildPdfFromMarkdown } from '@/lib/mdPdf';
 import { downloadBytes } from '@/lib/download';
 import { IconDownload, IconSparkle, IconSpinner, IconX } from './Icons';
 
+/** Ends a reply when (and only when) it's substantial content worth exporting. */
+const DOWNLOADABLE_MARKER = '[[DOWNLOADABLE]]';
+
 const SYSTEM_PROMPT =
   `You are the in-app assistant for Dastavej, a 100% free, client-side PDF editor — no ` +
   `backend, nothing ever uploaded. You help with two things:\n` +
@@ -30,11 +33,155 @@ const SYSTEM_PROMPT =
   `cleans up recognition errors; download as .txt or Word.\n` +
   `- Read aloud: text-to-speech using the browser's own voices.\n` +
   `Give concise, step-by-step answers that name the actual tab. Ask a clarifying question only ` +
-  `if truly necessary. ${PROFESSIONAL_STYLE_INSTRUCTION}`;
+  `if truly necessary. Format with plain Markdown (## headings, **bold**, "- " bullet lists) — ` +
+  `it will be rendered, not shown as raw symbols.\n` +
+  `Exactly one more rule: if — and only if — your reply is a substantial, self-contained piece ` +
+  `of requested content meant to be saved (a report, letter, article, summary, essay and the ` +
+  `like), end the reply on its own final line with exactly \`${DOWNLOADABLE_MARKER}\` and ` +
+  `nothing else on that line. Do NOT add it for short answers, feature-usage guidance, ` +
+  `clarifying questions, or small talk. ${PROFESSIONAL_STYLE_INSTRUCTION}`;
 
 interface Msg {
   role: 'user' | 'assistant';
   content: string;
+  /** only assistant replies that end with DOWNLOADABLE_MARKER set this */
+  downloadable?: boolean;
+}
+
+/** Strips the trailing marker line (if present) and reports whether it was there. */
+function splitDownloadableMarker(text: string): { content: string; downloadable: boolean } {
+  const lines = text.split('\n');
+  while (lines.length && lines[lines.length - 1].trim() === '') lines.pop();
+  if (lines.length && lines[lines.length - 1].trim() === DOWNLOADABLE_MARKER) {
+    lines.pop();
+    return { content: lines.join('\n').trim(), downloadable: true };
+  }
+  return { content: text.trim(), downloadable: false };
+}
+
+/** Inline **bold** / *italic* / `code` — everything else renders as plain text, no stray symbols. */
+function renderInline(text: string, keyPrefix: string): React.ReactNode[] {
+  const nodes: React.ReactNode[] = [];
+  const re = /\*\*(.+?)\*\*|`(.+?)`|\*(.+?)\*/g;
+  let last = 0;
+  let i = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) {
+    if (m.index > last) nodes.push(text.slice(last, m.index));
+    if (m[1] !== undefined) nodes.push(<strong key={`${keyPrefix}-${i++}`}>{m[1]}</strong>);
+    else if (m[2] !== undefined)
+      nodes.push(
+        <code key={`${keyPrefix}-${i++}`} className="rounded bg-black/10 px-1 py-0.5 dark:bg-white/10">
+          {m[2]}
+        </code>,
+      );
+    else if (m[3] !== undefined) nodes.push(<em key={`${keyPrefix}-${i++}`}>{m[3]}</em>);
+    last = re.lastIndex;
+  }
+  if (last < text.length) nodes.push(text.slice(last));
+  return nodes;
+}
+
+/**
+ * Renders a small, safe subset of Markdown (headings, bold/italic/code,
+ * bullet/numbered lists, rules) as real formatting — headings look like
+ * headings, bullets look like bullets — instead of dumping raw `##`/`**`
+ * characters into the chat bubble.
+ */
+function MarkdownLite({ text }: { text: string }) {
+  const blocks: React.ReactNode[] = [];
+  let para: string[] = [];
+  let list: { ordered: boolean; items: string[] } | null = null;
+  let key = 0;
+
+  const flushPara = () => {
+    if (para.length) {
+      blocks.push(
+        <p key={key} className="mb-1.5 last:mb-0">
+          {renderInline(para.join(' '), `p${key++}`)}
+        </p>,
+      );
+      para = [];
+    }
+  };
+  const flushList = () => {
+    if (list) {
+      const items = list.items;
+      const ordered = list.ordered;
+      blocks.push(
+        ordered ? (
+          <ol key={key} className="mb-1.5 ml-4 list-decimal space-y-0.5 last:mb-0">
+            {items.map((it, i) => (
+              <li key={i}>{renderInline(it, `ol${key}-${i}`)}</li>
+            ))}
+          </ol>
+        ) : (
+          <ul key={key} className="mb-1.5 ml-4 list-disc space-y-0.5 last:mb-0">
+            {items.map((it, i) => (
+              <li key={i}>{renderInline(it, `ul${key}-${i}`)}</li>
+            ))}
+          </ul>
+        ),
+      );
+      key++;
+      list = null;
+    }
+  };
+
+  for (const raw of text.split('\n')) {
+    const line = raw.trim();
+    if (!line) {
+      flushPara();
+      flushList();
+      continue;
+    }
+    const heading = line.match(/^(#{1,6})\s+(.*)$/);
+    if (heading) {
+      flushPara();
+      flushList();
+      const level = heading[1].length;
+      const cls =
+        level <= 2 ? 'mt-2 mb-1 text-[13px] font-bold first:mt-0' : 'mt-1.5 mb-0.5 text-[13px] font-semibold first:mt-0';
+      blocks.push(
+        <p key={key} className={cls}>
+          {renderInline(heading[2], `h${key++}`)}
+        </p>,
+      );
+      continue;
+    }
+    if (/^(-{3,}|\*{3,}|_{3,})$/.test(line)) {
+      flushPara();
+      flushList();
+      blocks.push(<hr key={key++} className="my-2 border-slate-300 dark:border-slate-700" />);
+      continue;
+    }
+    const bullet = line.match(/^[-*+]\s+(.*)$/);
+    if (bullet) {
+      flushPara();
+      if (!list || list.ordered) {
+        flushList();
+        list = { ordered: false, items: [] };
+      }
+      list.items.push(bullet[1]);
+      continue;
+    }
+    const numbered = line.match(/^\d+[.)]\s+(.*)$/);
+    if (numbered) {
+      flushPara();
+      if (!list || !list.ordered) {
+        flushList();
+        list = { ordered: true, items: [] };
+      }
+      list.items.push(numbered[1]);
+      continue;
+    }
+    flushList();
+    para.push(line);
+  }
+  flushPara();
+  flushList();
+
+  return <>{blocks}</>;
 }
 
 /**
@@ -77,7 +224,8 @@ export default function AiChatWidget() {
         ...next.map((m) => ({ role: m.role, content: m.content })),
       ];
       const reply = await aiChat(history);
-      setMessages((cur) => [...cur, { role: 'assistant', content: reply.trim() }]);
+      const { content, downloadable } = splitDownloadableMarker(reply);
+      setMessages((cur) => [...cur, { role: 'assistant', content, downloadable }]);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -140,14 +288,14 @@ export default function AiChatWidget() {
                 {messages.map((m, i) => (
                   <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                     <div
-                      className={`max-w-[85%] rounded-xl px-3 py-2 text-sm whitespace-pre-wrap ${
+                      className={`max-w-[85%] rounded-xl px-3 py-2 text-sm ${
                         m.role === 'user'
-                          ? 'bg-indigo-500 text-white'
+                          ? 'whitespace-pre-wrap bg-indigo-500 text-white'
                           : 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-100'
                       }`}
                     >
-                      {m.content}
-                      {m.role === 'assistant' && (
+                      {m.role === 'assistant' ? <MarkdownLite text={m.content} /> : m.content}
+                      {m.role === 'assistant' && m.downloadable && (
                         <button
                           onClick={() =>
                             void downloadAsPdf(m.content, messages[i - 1]?.content ?? 'Dastavej AI response')
