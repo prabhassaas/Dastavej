@@ -2,7 +2,14 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { aiChat, isAiConfigured, loadAiSettings, PROFESSIONAL_STYLE_INSTRUCTION, type ChatMessage } from '@/lib/ai';
+import {
+  aiChat,
+  isAiConfigured,
+  isDefaultAiSettings,
+  loadAiSettings,
+  PROFESSIONAL_STYLE_INSTRUCTION,
+  type ChatMessage,
+} from '@/lib/ai';
 import { buildPdfFromMarkdown } from '@/lib/mdPdf';
 import { downloadBytes } from '@/lib/download';
 import { IconDownload, IconSparkle, IconSpinner, IconX } from './Icons';
@@ -200,10 +207,15 @@ export default function AiChatWidget() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const [configured, setConfigured] = useState(true); // avoid a flash of the nudge before mount
+  const [usingDefault, setUsingDefault] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (open) setConfigured(isAiConfigured(loadAiSettings()));
+    if (open) {
+      const settings = loadAiSettings();
+      setConfigured(isAiConfigured(settings));
+      setUsingDefault(isDefaultAiSettings(settings));
+    }
   }, [open]);
 
   useEffect(() => {
@@ -283,6 +295,13 @@ export default function AiChatWidget() {
                   <p className="text-xs text-slate-400 dark:text-slate-500">
                     Ask me to write something (I'll offer it as a downloadable PDF), or ask "how do
                     I split a PDF" / "how do I add a watermark" for feature help.
+                    {usingDefault && (
+                      <>
+                        {' '}
+                        This defaults to a local <b>Ollama</b> instance — install it from
+                        ollama.com and run <code className="rounded bg-black/10 px-1 dark:bg-white/10">OLLAMA_ORIGINS=* ollama serve</code> for this to work, or pick a different provider in the AI tab.
+                      </>
+                    )}
                   </p>
                 )}
                 {messages.map((m, i) => (

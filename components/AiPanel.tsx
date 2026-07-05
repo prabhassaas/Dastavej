@@ -7,6 +7,7 @@ import {
   AI_PRESETS,
   aiChat,
   isAiConfigured,
+  isDefaultAiSettings,
   loadAiSettings,
   parseAiSettingsFile,
   parseJsonReply,
@@ -270,9 +271,12 @@ export default function AiPanel() {
           {!settingsOpen && isAiConfigured(settings) ? (
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="flex items-center gap-2 text-sm">
-                <span className="text-emerald-600 dark:text-emerald-400">✓ AI configured</span>
+                <span className="text-emerald-600 dark:text-emerald-400">
+                  ✓ {isDefaultAiSettings(settings) ? 'AI ready (built-in default)' : 'AI configured'}
+                </span>
                 <span className="text-slate-400 dark:text-slate-500">
                   {settings.model} @ {settings.endpoint}
+                  {isDefaultAiSettings(settings) && ' — install Ollama locally to use this'}
                 </span>
               </p>
               <button

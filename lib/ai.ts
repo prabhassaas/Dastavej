@@ -43,13 +43,26 @@ export const AI_PRESETS: { name: string; endpoint: string; note: string }[] = [
   },
 ];
 
+/**
+ * Ollama needs no API key — "localhost" always resolves to the visitor's own
+ * machine, never the site owner's — so it's the one provider safe to ship as
+ * the zero-config default. Anyone who already has `ollama serve` running
+ * locally gets AI working with no setup; everyone else sees the normal
+ * connection-failed message (with the CORS/install fix) the first time they
+ * try it, same as picking the preset manually.
+ */
+const DEFAULT_SETTINGS: AiSettings = {
+  endpoint: 'http://localhost:11434/v1',
+  apiKey: '',
+  model: 'llama3.1',
+};
+
 export function loadAiSettings(): AiSettings {
-  const defaults: AiSettings = { endpoint: '', apiKey: '', model: '' };
-  if (typeof window === 'undefined') return defaults;
+  if (typeof window === 'undefined') return DEFAULT_SETTINGS;
   try {
-    return { ...defaults, ...JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}') };
+    return { ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}') };
   } catch {
-    return defaults;
+    return DEFAULT_SETTINGS;
   }
 }
 
@@ -60,6 +73,15 @@ export function saveAiSettings(settings: AiSettings): void {
 /** True once endpoint + model are both filled in — "ready to use" settings. */
 export function isAiConfigured(settings: AiSettings): boolean {
   return Boolean(settings.endpoint.trim() && settings.model.trim());
+}
+
+/** True when nothing has been explicitly changed from the built-in Ollama default. */
+export function isDefaultAiSettings(settings: AiSettings): boolean {
+  return (
+    settings.endpoint === DEFAULT_SETTINGS.endpoint &&
+    settings.model === DEFAULT_SETTINGS.model &&
+    !settings.apiKey
+  );
 }
 
 /**
