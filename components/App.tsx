@@ -25,6 +25,7 @@ import {
   IconForm,
   IconGrid,
   IconHighlight,
+  IconHome,
   IconMoon,
   IconPencil,
   IconScan,
@@ -34,6 +35,9 @@ import {
   IconSun,
   IconVolume,
 } from './Icons';
+
+/** Prabhas SaaS's own site — the parent brand behind Dastavej. */
+const PARENT_SITE_URL = 'https://prabhassaas.in';
 
 const TABS: {
   id: Tab;
@@ -112,6 +116,16 @@ function Workspace() {
           <IconShield className="h-4 w-4 text-emerald-500 dark:text-emerald-400" />
           100% local
         </span>
+        <a
+          href={PARENT_SITE_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Prabhas SaaS — the team behind Dastavej"
+          className="flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[13px] font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+        >
+          <IconHome className="h-4 w-4" />
+          <span className="hidden sm:inline">Home</span>
+        </a>
         <Link
           href="/developers"
           className="hidden rounded-lg px-2.5 py-1.5 text-[13px] font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 sm:block dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
