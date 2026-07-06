@@ -13,6 +13,14 @@ export interface AiSettings {
   apiKey: string;
   /** model name, e.g. llama3.1, qwen2.5:14b, llama-3.3-70b-versatile */
   model: string;
+  /**
+   * Embedding model for RAG (chat-with-your-PDF, API doc search) — a
+   * separate model from `model` since chat and embedding models are almost
+   * never the same. Ollama: `ollama pull nomic-embed-text`. Not every
+   * provider offers embeddings (e.g. Groq currently doesn't) — RAG features
+   * simply error with a clear message if the endpoint doesn't support it.
+   */
+  embedModel: string;
 }
 
 const STORAGE_KEY = 'dastavej-ai-settings';
@@ -55,6 +63,7 @@ const DEFAULT_SETTINGS: AiSettings = {
   endpoint: 'http://localhost:11434/v1',
   apiKey: '',
   model: 'llama3.1',
+  embedModel: 'nomic-embed-text',
 };
 
 export function loadAiSettings(): AiSettings {
@@ -103,6 +112,7 @@ export function parseAiSettingsFile(text: string): AiSettings {
     endpoint: typeof parsed.endpoint === 'string' ? parsed.endpoint : '',
     apiKey: typeof parsed.apiKey === 'string' ? parsed.apiKey : '',
     model: typeof parsed.model === 'string' ? parsed.model : '',
+    embedModel: typeof parsed.embedModel === 'string' ? parsed.embedModel : DEFAULT_SETTINGS.embedModel,
   };
 }
 
@@ -123,22 +133,22 @@ export interface ChatMessage {
   content: string;
 }
 
-/** One non-streaming chat completion. Throws with a readable message. */
-export async function aiChat(messages: ChatMessage[], signal?: AbortSignal): Promise<string> {
+/** Shared POST to the configured provider — used by both chat and embeddings. */
+async function postToProvider(path: string, body: unknown, signal?: AbortSignal): Promise<unknown> {
   const s = loadAiSettings();
-  if (!s.endpoint || !s.model) {
-    throw new Error('Configure an AI endpoint and model first (AI tab → Provider settings).');
+  if (!s.endpoint) {
+    throw new Error('Configure an AI endpoint first (AI tab → Provider settings).');
   }
   let res: Response;
   try {
-    res = await fetch(`${s.endpoint.replace(/\/+$/, '')}/chat/completions`, {
+    res = await fetch(`${s.endpoint.replace(/\/+$/, '')}${path}`, {
       method: 'POST',
       signal,
       headers: {
         'Content-Type': 'application/json',
         ...(s.apiKey ? { Authorization: `Bearer ${s.apiKey}` } : {}),
       },
-      body: JSON.stringify({ model: s.model, messages, stream: false }),
+      body: JSON.stringify(body),
     });
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') throw err;
@@ -154,13 +164,47 @@ export async function aiChat(messages: ChatMessage[], signal?: AbortSignal): Pro
     );
   }
   if (!res.ok) {
-    const body = (await res.text()).slice(0, 300);
-    throw new Error(`AI endpoint returned ${res.status}: ${body}`);
+    const text = (await res.text()).slice(0, 300);
+    throw new Error(`AI endpoint returned ${res.status}: ${text}`);
   }
-  const data = await res.json();
+  return res.json();
+}
+
+/** One non-streaming chat completion. Throws with a readable message. */
+export async function aiChat(messages: ChatMessage[], signal?: AbortSignal): Promise<string> {
+  const s = loadAiSettings();
+  if (!s.model) throw new Error('Configure a model first (AI tab → Provider settings).');
+  const data = (await postToProvider(
+    '/chat/completions',
+    { model: s.model, messages, stream: false },
+    signal,
+  )) as { choices?: { message?: { content?: string } }[] };
   const content = data?.choices?.[0]?.message?.content;
   if (typeof content !== 'string') throw new Error('AI endpoint returned no content.');
   return content;
+}
+
+/**
+ * Embed one or more strings into vectors, for RAG (chat-with-your-PDF, API
+ * doc search). Uses the OpenAI-compatible `/embeddings` endpoint — Ollama
+ * supports this natively once you `ollama pull nomic-embed-text` (or
+ * another embedding model). Not every provider offers embeddings; if the
+ * endpoint doesn't, this throws the same readable error as a bad chat call.
+ */
+export async function embedTexts(texts: string[], signal?: AbortSignal): Promise<number[][]> {
+  const s = loadAiSettings();
+  const data = (await postToProvider(
+    '/embeddings',
+    { model: s.embedModel || DEFAULT_SETTINGS.embedModel, input: texts },
+    signal,
+  )) as { data?: { embedding?: number[] }[] };
+  if (!Array.isArray(data?.data) || data.data.some((d) => !Array.isArray(d?.embedding))) {
+    throw new Error(
+      `The AI endpoint didn't return embeddings in the expected format — does ${s.endpoint} ` +
+        `support an embedding model (e.g. \`ollama pull ${s.embedModel || DEFAULT_SETTINGS.embedModel}\`)?`,
+    );
+  }
+  return data.data.map((d) => d.embedding as number[]);
 }
 
 /**

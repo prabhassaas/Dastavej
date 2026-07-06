@@ -1,30 +1,13 @@
 import Link from 'next/link';
 import type { Metadata } from 'next';
 import { LogoMark } from '@/components/Logo';
+import { API_FUNCTIONS } from '@/lib/apiDocs';
+import ApiDocChat from '@/components/ApiDocChat';
 
 export const metadata: Metadata = {
   title: 'Developers — Dastavej Core',
   description: 'Embed Dastavej\'s client-side PDF engine in your own app — a headless, framework-free JS module.',
 };
-
-const FUNCTIONS: { name: string; from: string; desc: string }[] = [
-  { name: 'mergePdfs(files)', from: 'pdfOps', desc: 'Merge PDF byte arrays, in order, into one document.' },
-  { name: 'reorderPages(bytes, order)', from: 'pdfOps', desc: 'Rebuild a PDF with a new page order/subset and per-page rotation.' },
-  { name: 'extractPage(bytes, index)', from: 'pdfOps', desc: 'Pull one page out as its own standalone PDF.' },
-  { name: 'compressPdf(bytes, opts)', from: 'compress', desc: 'Downsample & re-encode embedded JPEGs in a Web Worker.' },
-  { name: 'assemblePdf(sources, pages, edits, extras)', from: 'export', desc: 'Build a document from sources + apply text edits, annotations, watermark/header/footer.' },
-  { name: 'printPdf(bytes)', from: 'print', desc: 'Open the browser print dialog with a date/time-stamped copy.' },
-  { name: 'openForConversion(bytes)', from: 'convert', desc: 'Parse bytes into a pdf.js document for the convert* functions.' },
-  { name: 'convertToWord(doc, onProgress)', from: 'convert', desc: 'PDF → .docx (paragraphs, page breaks, heading sizes).' },
-  { name: 'convertToExcel(doc, onProgress)', from: 'convert', desc: 'PDF → .xlsx (one worksheet per page).' },
-  { name: 'convertToPowerPoint(doc, onProgress)', from: 'convert', desc: 'PDF → .pptx (each page as a full-bleed slide image).' },
-  { name: 'buildFormPdf(options)', from: 'formBuilder', desc: 'Generate a fillable AcroForm PDF from a field spec, with logo/photo box.' },
-  { name: 'FORM_TEMPLATES', from: 'formTemplates', desc: '10 ready-made professional form field sets.' },
-  { name: 'extractFormData(name, bytes)', from: 'formData', desc: 'Read AcroForm field values out of a filled PDF.' },
-  { name: 'exportRowsToXlsx(rows)', from: 'formData', desc: 'Write form responses to a real .xlsx (SheetJS).' },
-  { name: 'ocrPdfBytes(bytes, onProgress, opts)', from: 'ocr', desc: 'Run Tesseract.js OCR over a PDF\'s pages, fully client-side.' },
-  { name: 'buildPdfFromMarkdown(title, markdown)', from: 'mdPdf', desc: 'Render Markdown into a clean, styled PDF report.' },
-];
 
 export default function DevelopersPage() {
   return (
@@ -164,7 +147,7 @@ console.log(results.map((r) => r.text).join('\\n\\n'));`}
               </tr>
             </thead>
             <tbody>
-              {FUNCTIONS.map((f) => (
+              {API_FUNCTIONS.map((f) => (
                 <tr key={f.name} className="border-t border-slate-200 dark:border-slate-800">
                   <td className="px-3 py-2 font-mono whitespace-nowrap">{f.name}</td>
                   <td className="px-3 py-2 text-slate-400">lib/{f.from}.ts</td>
@@ -173,6 +156,15 @@ console.log(results.map((r) => r.text).join('\\n\\n'));`}
               ))}
             </tbody>
           </table>
+        </div>
+
+        <h2 className="mt-10 text-lg font-semibold">Ask about the API</h2>
+        <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+          RAG over this exact reference and the examples above — answers quote real function
+          signatures instead of a paraphrase from memory, and stay correct as the API evolves.
+        </p>
+        <div className="mt-3">
+          <ApiDocChat />
         </div>
 
         <div className="mt-10 flex flex-wrap items-center gap-4 border-t border-slate-200 pt-6 text-sm text-slate-500 dark:border-slate-800 dark:text-slate-400">

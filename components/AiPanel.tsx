@@ -18,6 +18,8 @@ import {
 } from '@/lib/ai';
 import { buildPdfFromMarkdown } from '@/lib/mdPdf';
 import { assemblePdf } from '@/lib/export';
+import { extractAllText } from '@/lib/tts';
+import { buildRagIndex, searchRagIndex, formatContext, type RagChunk } from '@/lib/rag';
 import { downloadBytes } from '@/lib/download';
 import { IconDownload, IconSparkle, IconSpinner } from './Icons';
 
@@ -34,7 +36,7 @@ export default function AiPanel() {
   const { state, dispatch, addGeneratedPdf } = usePdfStore();
 
   // ── provider settings ────────────────────────────────────────────────────
-  const [settings, setSettings] = useState<AiSettings>({ endpoint: '', apiKey: '', model: '' });
+  const [settings, setSettings] = useState<AiSettings>({ endpoint: '', apiKey: '', model: '', embedModel: '' });
   const [settingsMsg, setSettingsMsg] = useState('');
   const [testing, setTesting] = useState(false);
   // Collapsed by default once a config already exists, so daily use doesn't
@@ -169,6 +171,81 @@ export default function AiPanel() {
       });
     } finally {
       setGenerating(false);
+    }
+  };
+
+  // ── Chat with this document (RAG) ────────────────────────────────────────
+  const [ragIndex, setRagIndex] = useState<RagChunk[] | null>(null);
+  const [ragBuilding, setRagBuilding] = useState(false);
+  const [ragStatus, setRagStatus] = useState('');
+  const [ragQuestion, setRagQuestion] = useState('');
+  const [ragAsking, setRagAsking] = useState(false);
+  const [ragHistory, setRagHistory] = useState<{ question: string; answer: string; sources: string[] }[]>([]);
+
+  const buildDocIndex = async () => {
+    setRagBuilding(true);
+    setRagStatus('Reading document text…');
+    setRagIndex(null);
+    setRagHistory([]);
+    try {
+      const bytes = await assemblePdf(state.sources, state.pages, state.edits, {
+        annots: state.annots,
+        marks: state.marks,
+      });
+      const pages = await extractAllText(bytes);
+      const nonEmpty = pages
+        .map((text, i) => ({ text, source: `Page ${i + 1}` }))
+        .filter((p) => p.text.trim());
+      if (!nonEmpty.length) {
+        throw new Error(
+          'No extractable text found — this looks like a scanned document. Run it through the OCR tab first.',
+        );
+      }
+      const index = await buildRagIndex(nonEmpty, (done, total) =>
+        setRagStatus(`Embedding chunks… ${done}/${total}`),
+      );
+      setRagIndex(index);
+      setRagStatus('');
+    } catch (err) {
+      dispatch({
+        type: 'SET_ERROR',
+        error: `Could not index the document: ${err instanceof Error ? err.message : String(err)}`,
+      });
+      setRagStatus('');
+    } finally {
+      setRagBuilding(false);
+    }
+  };
+
+  const askDoc = async () => {
+    if (!ragIndex || !ragQuestion.trim() || ragAsking) return;
+    const question = ragQuestion.trim();
+    setRagQuestion('');
+    setRagAsking(true);
+    try {
+      const top = await searchRagIndex(ragIndex, question, 5);
+      const context = formatContext(top);
+      const answer = await aiChat([
+        {
+          role: 'system',
+          content:
+            "Answer the user's question using ONLY the provided document excerpts. If the " +
+            "answer isn't in the excerpts, say so plainly rather than guessing or using outside " +
+            'knowledge. Cite excerpt numbers like [1] where relevant.',
+        },
+        { role: 'user', content: `Document excerpts:\n${context}\n\nQuestion: ${question}` },
+      ]);
+      setRagHistory((h) => [
+        ...h,
+        { question, answer: answer.trim(), sources: [...new Set(top.map((c) => c.source ?? '').filter(Boolean))] },
+      ]);
+    } catch (err) {
+      dispatch({
+        type: 'SET_ERROR',
+        error: `Question failed: ${err instanceof Error ? err.message : String(err)}`,
+      });
+    } finally {
+      setRagAsking(false);
     }
   };
 
@@ -336,7 +413,7 @@ export default function AiPanel() {
                     className={`w-full ${inputCls}`}
                   />
                 </label>
-                <label className="block sm:col-span-2">
+                <label className="block">
                   <span className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
                     API key (leave empty for local models)
                   </span>
@@ -345,6 +422,17 @@ export default function AiPanel() {
                     value={settings.apiKey}
                     onChange={(e) => persist({ apiKey: e.target.value })}
                     placeholder="sk-…"
+                    className={`w-full ${inputCls}`}
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
+                    Embedding model (for "chat with your PDF")
+                  </span>
+                  <input
+                    value={settings.embedModel}
+                    onChange={(e) => persist({ embedModel: e.target.value })}
+                    placeholder="nomic-embed-text"
                     className={`w-full ${inputCls}`}
                   />
                 </label>
@@ -466,6 +554,80 @@ export default function AiPanel() {
                 Open in editor
               </button>
             </div>
+          )}
+        </div>
+
+        {/* Chat with this document (RAG) */}
+        <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900/60">
+          <p className="text-sm font-semibold">Chat with this document</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Retrieval-augmented generation (RAG): the document's text is embedded and searched
+            locally first, then the AI answers only from the relevant excerpts — grounded in what
+            the document actually says, instead of guessing.
+          </p>
+          {state.pages.length === 0 ? (
+            <p className="text-xs text-amber-600 dark:text-amber-400/80">Open a PDF first.</p>
+          ) : !ragIndex ? (
+            <button
+              onClick={() => void buildDocIndex()}
+              disabled={ragBuilding}
+              className="flex items-center gap-2 rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-400 disabled:opacity-50"
+            >
+              {ragBuilding ? <IconSpinner className="h-4 w-4" /> : <IconSparkle className="h-4 w-4" />}
+              {ragBuilding ? ragStatus || 'Indexing…' : 'Index this document'}
+            </button>
+          ) : (
+            <>
+              <p className="text-xs text-emerald-600 dark:text-emerald-400">
+                ✓ Indexed {ragIndex.length} chunk{ragIndex.length === 1 ? '' : 's'} — ask away.
+              </p>
+              {ragHistory.length > 0 && (
+                <div className="space-y-3 rounded-xl border border-slate-100 p-3 dark:border-slate-800">
+                  {ragHistory.map((h, i) => (
+                    <div key={i} className="space-y-1">
+                      <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">Q: {h.question}</p>
+                      <p className="text-sm text-slate-700 dark:text-slate-200">{h.answer}</p>
+                      {h.sources.length > 0 && (
+                        <p className="text-[11px] text-slate-400">Sources: {h.sources.join(', ')}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {ragAsking && (
+                <div className="flex items-center gap-2 text-xs text-slate-400">
+                  <IconSpinner className="h-3.5 w-3.5" />
+                  Thinking…
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <input
+                  value={ragQuestion}
+                  onChange={(e) => setRagQuestion(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') void askDoc();
+                  }}
+                  placeholder="Ask something about this document…"
+                  className={`flex-1 ${inputCls}`}
+                />
+                <button
+                  onClick={() => void askDoc()}
+                  disabled={ragAsking || !ragQuestion.trim()}
+                  className="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-400 disabled:opacity-50"
+                >
+                  Ask
+                </button>
+              </div>
+              <button
+                onClick={() => {
+                  setRagIndex(null);
+                  setRagHistory([]);
+                }}
+                className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+              >
+                Re-index (if you edited the document)
+              </button>
+            </>
           )}
         </div>
 
