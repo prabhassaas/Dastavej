@@ -1,11 +1,11 @@
 import {
   PDFCheckBox,
-  PDFDocument,
   PDFDropdown,
   PDFOptionList,
   PDFRadioGroup,
   PDFTextField,
-} from 'pdf-lib';
+} from '@cantoo/pdf-lib';
+import { loadPdf } from './pdfLoad';
 
 /**
  * "Connect forms to Excel" — fully client-side:
@@ -22,7 +22,7 @@ export interface FormRow {
 
 /** Read every AcroForm field value from a filled PDF. */
 export async function extractFormData(fileName: string, bytes: Uint8Array): Promise<FormRow> {
-  const doc = await PDFDocument.load(bytes, { updateMetadata: false });
+  const doc = await loadPdf(bytes, { updateMetadata: false });
   const form = doc.getForm();
   const values: Record<string, string> = {};
 

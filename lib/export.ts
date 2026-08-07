@@ -1,5 +1,6 @@
-import { PDFDocument, StandardFonts, degrees, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
+import { PDFDocument, StandardFonts, degrees, rgb, type PDFFont, type PDFPage } from '@cantoo/pdf-lib';
 import type { Annotation, DocMarks, FontFamily, PageEdits, PageEntry, SourceFile } from './types';
+import { loadPdf } from './pdfLoad';
 
 export interface AssembleExtras {
   annots?: Record<string, Annotation[]>;
@@ -89,12 +90,50 @@ function drawStyledText(
  * performs merging), then text edits, annotations and document marks
  * (watermark, header/footer, page numbers) are replayed in PDF user space.
  */
+/**
+ * True when the working document is exactly one untouched source file: same
+ * pages, same order, no rotation, no text edits, no annotations, no marks.
+ * In that case the original bytes ARE the correct output — skipping the
+ * pdf-lib rebuild avoids a real-world pdf-lib limitation where an encrypted
+ * source's content streams get corrupted by copyPages/save even after
+ * `ignoreEncryption`, and it's strictly more faithful anyway (no lossy
+ * re-encoding of an already-correct file).
+ */
+function isUnmodifiedSingleSource(
+  sources: Record<string, SourceFile>,
+  pages: PageEntry[],
+  edits: Record<string, PageEdits>,
+  extras: AssembleExtras,
+): SourceFile | null {
+  const ids = Object.keys(sources);
+  if (ids.length !== 1) return null;
+  const source = sources[ids[0]];
+  if (pages.length !== source.numPages) return null;
+  const inOrder = pages.every(
+    (p, i) => p.sourceId === source.id && p.pageIndex === i && p.rotation === 0,
+  );
+  if (!inOrder) return null;
+  const noEdits = pages.every((p) => {
+    const e = edits[p.id];
+    return !e || (Object.keys(e.textEdits).length === 0 && e.added.length === 0);
+  });
+  if (!noEdits) return null;
+  const noAnnots = !extras.annots || pages.every((p) => !extras.annots![p.id]?.length);
+  if (!noAnnots) return null;
+  const noMarks = !extras.marks || (!extras.marks.watermark.enabled && !extras.marks.headerFooter.enabled);
+  if (!noMarks) return null;
+  return source;
+}
+
 export async function assemblePdf(
   sources: Record<string, SourceFile>,
   pages: PageEntry[],
   edits: Record<string, PageEdits>,
   extras: AssembleExtras = {},
 ): Promise<Uint8Array> {
+  const untouched = isUnmodifiedSingleSource(sources, pages, edits, extras);
+  if (untouched) return untouched.bytes;
+
   const out = await PDFDocument.create();
   const font = await out.embedFont(StandardFonts.Helvetica);
   const fonts = new FontPicker(out);
@@ -102,7 +141,7 @@ export async function assemblePdf(
   const srcDocs = new Map<string, PDFDocument>();
   for (const entry of pages) {
     if (!srcDocs.has(entry.sourceId)) {
-      srcDocs.set(entry.sourceId, await PDFDocument.load(sources[entry.sourceId].bytes));
+      srcDocs.set(entry.sourceId, await loadPdf(sources[entry.sourceId].bytes));
     }
   }
 

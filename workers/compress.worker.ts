@@ -10,11 +10,11 @@
 import {
   PDFArray,
   PDFDict,
-  PDFDocument,
   PDFName,
   PDFRawStream,
   PDFRef,
-} from 'pdf-lib';
+} from '@cantoo/pdf-lib';
+import { loadPdf } from '../lib/pdfLoad';
 
 export interface CompressRequest {
   bytes: ArrayBuffer;
@@ -81,7 +81,7 @@ function isRecompressibleJpeg(stream: PDFRawStream): boolean {
 self.onmessage = async (event: MessageEvent<CompressRequest>) => {
   try {
     const { bytes, quality, maxDimension } = event.data;
-    const doc = await PDFDocument.load(bytes);
+    const doc = await loadPdf(bytes);
 
     const targets: { ref: PDFRef; stream: PDFRawStream }[] = [];
     for (const [ref, obj] of doc.context.enumerateIndirectObjects()) {

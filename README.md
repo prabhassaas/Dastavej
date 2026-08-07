@@ -30,6 +30,7 @@ and every byte of every PDF you open stays on your device.
 | **Forms → Excel** | Import filled copies of your form (or any AcroForm PDF); each file becomes one row, then export all responses as a real **`.xlsx`** or CSV — parsed and written entirely on-device. |
 | **Flatten & sign** | Upload any filled AcroForm PDF and **flatten** it — form field values are burned permanently into the page content (via `pdf-lib`'s built-in flatten) so the result behaves like a signed, uneditable document, with zero fields left over. |
 | **Compressor** | A dedicated **Web Worker** parses the PDF with `pdf-lib`, finds embedded JPEG (`DCTDecode`) images, decodes them with `createImageBitmap`, downsamples them on an **OffscreenCanvas**, re-encodes at your chosen JPEG quality (default 0.6) and swaps the streams back in. The UI thread never blocks. |
+| **Encrypted PDFs** | Bank statements, HR/government PDFs and similar files with owner-password/permission restrictions (no open password) are decrypted transparently on upload, so every tool — convert, organize, compress, forms — works on them exactly like any other PDF. |
 | **Print** | One-click printing through the browser dialog; a live date & clock sits in the header and every printed page is stamped with the print date & time. |
 | **Themes** | Light and dark UI with a one-click toggle (defaults to your OS preference). |
 | **OCR** | Pages (or a standalone uploaded photo/screenshot — no PDF required) are rasterized to a canvas and recognized by `tesseract.js`, which runs its WASM engine inside its own **Web Worker**. The worker script, WASM core and English language model are self-hosted static assets — no CDN involved. An optional **"Improve with AI"** pass (using your configured AI provider) cleans up remaining recognition errors. Extracted text can be copied, downloaded as `.txt`, or downloaded as an editable **`.docx`**. |
@@ -60,7 +61,7 @@ spreadsheet is generated locally with SheetJS when you click export.
 
 - **Next.js (App Router)** with `output: 'export'` — builds to a fully static `out/` directory
 - **Tailwind CSS 4** for styling
-- **pdfjs-dist** for rendering, **pdf-lib** for manipulation
+- **pdfjs-dist** for rendering, **@cantoo/pdf-lib** (a maintained fork of pdf-lib, with working encrypted-PDF support) for manipulation
 - **Web Workers** (`workers/compress.worker.ts`, tesseract.js's internal worker) for heavy processing
 - **React in-memory state** — a single reducer holds sources, page order and edits
 

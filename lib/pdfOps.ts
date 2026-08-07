@@ -1,4 +1,5 @@
-import { PDFDocument, degrees } from 'pdf-lib';
+import { PDFDocument, degrees } from '@cantoo/pdf-lib';
+import { loadPdf } from './pdfLoad';
 
 /**
  * Basic, store-independent PDF page operations built on pdf-lib — the
@@ -10,7 +11,7 @@ import { PDFDocument, degrees } from 'pdf-lib';
 export async function mergePdfs(files: Uint8Array[]): Promise<Uint8Array> {
   const out = await PDFDocument.create();
   for (const bytes of files) {
-    const src = await PDFDocument.load(bytes);
+    const src = await loadPdf(bytes);
     const pages = await out.copyPages(src, src.getPageIndices());
     pages.forEach((p) => out.addPage(p));
   }
@@ -29,7 +30,7 @@ export interface PageOp {
  * delete that page) and optional per-page rotation.
  */
 export async function reorderPages(bytes: Uint8Array, order: PageOp[]): Promise<Uint8Array> {
-  const src = await PDFDocument.load(bytes);
+  const src = await loadPdf(bytes);
   const out = await PDFDocument.create();
   const copied = await out.copyPages(
     src,
@@ -56,7 +57,7 @@ export type PageRange = [start: number, end: number];
 
 /** Split a PDF into one output document per page range. */
 export async function splitPdfByRanges(bytes: Uint8Array, ranges: PageRange[]): Promise<Uint8Array[]> {
-  const src = await PDFDocument.load(bytes);
+  const src = await loadPdf(bytes);
   const total = src.getPageCount();
   const outputs: Uint8Array[] = [];
   for (const [start, end] of ranges) {
@@ -74,7 +75,7 @@ export async function splitPdfByRanges(bytes: Uint8Array, ranges: PageRange[]): 
 
 /** Split a PDF into fixed-size chunks of `pagesPerFile` pages each. */
 export async function splitPdfEveryNPages(bytes: Uint8Array, pagesPerFile: number): Promise<Uint8Array[]> {
-  const src = await PDFDocument.load(bytes);
+  const src = await loadPdf(bytes);
   const total = src.getPageCount();
   const ranges: PageRange[] = [];
   for (let s = 0; s < total; s += pagesPerFile) {

@@ -1,4 +1,4 @@
-import { PDFDocument, StandardFonts, rgb, type PDFFont } from 'pdf-lib';
+import { PDFDocument, StandardFonts, rgb, type PDFFont } from '@cantoo/pdf-lib';
 
 /**
  * Renders a limited-but-useful subset of Markdown (headings, paragraphs,

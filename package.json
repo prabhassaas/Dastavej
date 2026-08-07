@@ -1,6 +1,6 @@
 {
   "name": "dastavej",
-  "version": "1.11.0",
+  "version": "1.12.0",
   "private": true,
   "description": "100% free, client-side PDF editor. All processing happens locally in your browser.",
   "exports": {
@@ -21,10 +21,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@cantoo/pdf-lib": "^2.8.1",
     "@tesseract.js-data/eng": "^1.0.0",
     "docx": "^9.7.1",
     "next": "^15.3.4",
-    "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^5.3.31",
     "pptxgenjs": "^4.0.1",
     "react": "^19.1.0",

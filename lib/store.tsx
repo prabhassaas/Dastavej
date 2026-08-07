@@ -22,6 +22,7 @@ import {
   type WorkspaceState,
 } from './types';
 import { clearCache, clearCacheExcept, loadIntoCache } from './pdfCache';
+import { sanitizeEncryptedPdf } from './pdfLoad';
 
 const initialState: WorkspaceState = {
   sources: {},
@@ -408,7 +409,7 @@ export function PdfProvider({ children }: { children: ReactNode }) {
         continue;
       }
       try {
-        const bytes = new Uint8Array(await file.arrayBuffer());
+        const bytes = await sanitizeEncryptedPdf(new Uint8Array(await file.arrayBuffer()));
         const id = uid();
         const numPages = await loadIntoCache(id, bytes);
         dispatch({ type: 'ADD_SOURCE', source: { id, name: file.name, bytes, numPages } });

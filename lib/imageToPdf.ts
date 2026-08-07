@@ -1,4 +1,4 @@
-import { PDFDocument } from 'pdf-lib';
+import { PDFDocument } from '@cantoo/pdf-lib';
 
 export type PageFit = 'fit' | 'fill' | 'actual-size';
 

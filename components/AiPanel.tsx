@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { PDFDocument, PDFCheckBox, PDFDropdown, PDFRadioGroup, PDFTextField } from 'pdf-lib';
+import { PDFCheckBox, PDFDropdown, PDFRadioGroup, PDFTextField } from '@cantoo/pdf-lib';
+import { loadPdf } from '@/lib/pdfLoad';
 import { usePdfStore } from '@/lib/store';
 import {
   AI_PRESETS,
@@ -269,7 +270,7 @@ export default function AiPanel() {
     setFilling(true);
     setFillStatus('Reading form fields…');
     try {
-      const doc = await PDFDocument.load(formSource.bytes);
+      const doc = await loadPdf(formSource.bytes);
       const form = doc.getForm();
       const specs = form.getFields().map((f) => {
         const name = f.getName();

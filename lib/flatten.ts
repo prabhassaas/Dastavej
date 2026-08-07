@@ -1,4 +1,4 @@
-import { PDFDocument } from 'pdf-lib';
+import { loadPdf } from './pdfLoad';
 
 /**
  * Bake a filled AcroForm's field values into the page content and remove
@@ -7,7 +7,7 @@ import { PDFDocument } from 'pdf-lib';
  * form flattening; throws a readable error if the PDF has no form fields.
  */
 export async function flattenFormPdf(bytes: Uint8Array): Promise<Uint8Array> {
-  const doc = await PDFDocument.load(bytes);
+  const doc = await loadPdf(bytes);
   const form = doc.getForm();
   const fields = form.getFields();
   if (fields.length === 0) {

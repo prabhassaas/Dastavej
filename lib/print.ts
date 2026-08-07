@@ -1,4 +1,5 @@
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import { StandardFonts, rgb } from '@cantoo/pdf-lib';
+import { loadPdf } from './pdfLoad';
 
 /**
  * Print the given PDF via the browser's print dialog. Each page is stamped
@@ -10,7 +11,7 @@ export async function printPdf(bytes: Uint8Array, stampDateTime = true): Promise
   let toPrint = bytes;
 
   if (stampDateTime) {
-    const doc = await PDFDocument.load(bytes);
+    const doc = await loadPdf(bytes);
     const font = await doc.embedFont(StandardFonts.Helvetica);
     const now = new Date();
     const stamp = `Printed: ${now.toLocaleDateString(undefined, {
