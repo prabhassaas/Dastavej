@@ -1,4 +1,4 @@
-import { PDFDocument, EncryptedPDFError, type LoadOptions } from '@cantoo/pdf-lib';
+import { PDFDocument, type LoadOptions } from '@cantoo/pdf-lib';
 
 /**
  * Load a PDF with pdf-lib, tolerating owner-password/permissions-only
@@ -16,6 +16,17 @@ export function loadPdf(
 }
 
 /**
+ * Cheap, parser-free check for whether a PDF is encrypted: an encrypted
+ * file's trailer must contain a literal `/Encrypt` key naming the encryption
+ * dictionary (PDF spec), so a raw byte scan finds it without ever running
+ * pdf-lib's parser — which matters, because pdf-lib's parser is the fragile
+ * part here and should only be invoked on files that actually need it.
+ */
+function looksEncrypted(bytes: Uint8Array): boolean {
+  return new TextDecoder('latin1').decode(bytes).includes('/Encrypt');
+}
+
+/**
  * If `bytes` is an encrypted PDF, decrypt it once and return clean,
  * unencrypted bytes; otherwise returns `bytes` unchanged. `ignoreEncryption`
  * alone isn't enough for correctness: pdf-lib's page-copying path
@@ -26,14 +37,19 @@ export function loadPdf(
  * stream through pdf-lib's decrypt-on-read path, producing genuinely clean
  * bytes. Call this once at upload time, before bytes enter the workspace,
  * so every downstream operation just works on plain bytes.
+ *
+ * This is deliberately best-effort and never blocks the upload: pdf-lib's
+ * parser is far less tolerant of real-world PDF quirks than pdf.js (which
+ * does the actual viewing/rendering), so any failure here — encrypted or
+ * not — just falls back to the original bytes rather than surfacing a
+ * confusing pdf-lib error for a file that would otherwise open fine.
  */
 export async function sanitizeEncryptedPdf(bytes: Uint8Array): Promise<Uint8Array> {
+  if (!looksEncrypted(bytes)) return bytes;
   try {
-    await PDFDocument.load(bytes);
+    const doc = await PDFDocument.load(bytes, { ignoreEncryption: true });
+    return await doc.save();
+  } catch {
     return bytes;
-  } catch (err) {
-    if (!(err instanceof EncryptedPDFError)) throw err;
   }
-  const doc = await PDFDocument.load(bytes, { ignoreEncryption: true });
-  return doc.save();
 }
