@@ -119,7 +119,7 @@ export default function FormWizard() {
   const build = () =>
     buildFormPdf({
       title,
-      fields: fields.filter((f) => f.label.trim() || f.options.length),
+      fields: fields.filter((f) => f.label.trim() || f.options.some((o) => o.trim())),
       pageSize,
       orientation,
       logo,
@@ -444,10 +444,13 @@ export default function FormWizard() {
                         placeholder="Option A, Option B, Option C"
                         onChange={(e) =>
                           patchField(field.id, {
-                            options: e.target.value
-                              .split(',')
-                              .map((s) => s.trim())
-                              .filter(Boolean),
+                            // No .filter(Boolean) here: the input's displayed
+                            // value is field.options.join(', '), so dropping
+                            // empty segments live would erase the trailing
+                            // comma the instant it's typed — blank options
+                            // are cleaned up at build time instead (see
+                            // buildFormPdf), not on every keystroke.
+                            options: e.target.value.split(',').map((s) => s.trim()),
                           })
                         }
                         className={`w-full ${inputCls}`}

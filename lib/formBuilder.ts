@@ -86,7 +86,12 @@ export async function buildFormPdf(options: {
   /** optional applicant photo drawn inside the photo box */
   photo?: FormLogo | null;
 }): Promise<Uint8Array> {
-  const { title, fields, pageSize, orientation, logo, photoBox, photo } = options;
+  const { title, pageSize, orientation, logo, photoBox, photo } = options;
+  // Blank entries (a trailing/doubled comma while editing "A, B,") are
+  // normal mid-edit state, not something callers should have to filter
+  // themselves — drop them once here rather than at every options.length
+  // check below.
+  const fields = options.fields.map((f) => ({ ...f, options: f.options.map((o) => o.trim()).filter(Boolean) }));
   const [pw, ph] = PAGE_SIZES[pageSize] ?? PAGE_SIZES.A4;
   const [width, height] = orientation === 'landscape' ? [ph, pw] : [pw, ph];
 
