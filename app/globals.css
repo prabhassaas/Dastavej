@@ -1,5 +1,8 @@
 @import 'tailwindcss';
 
+/* Shared Prabhas SaaS top bar — see PrabhasSaaS-Website/docs/TOPBAR.md */
+@import './pss-topbar.css';
+
 /* Class-based dark mode, toggled by ThemeProvider on <html>. */
 @custom-variant dark (&:where(.dark, .dark *));
 

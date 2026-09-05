@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import PssTopBar from '@/components/PssTopBar';
 import type { Metadata } from 'next';
 import CoffeeButton from '@/components/CoffeeButton';
 import { LogoMark } from '@/components/Logo';
@@ -23,14 +24,10 @@ const FEATURES = [
 
 export default function AboutPage() {
   return (
+    <>
+      <PssTopBar current="/about" />
     <div className="min-h-full overflow-auto bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-100">
       <div className="mx-auto max-w-3xl px-6 py-12">
-        <Link
-          href="/"
-          className="text-sm font-medium text-indigo-500 hover:text-indigo-400 dark:text-indigo-400"
-        >
-          ← Back to the editor
-        </Link>
 
         <div className="mt-8 flex items-center gap-4">
           <Link href="/" title="Dastavej — back to home" className="transition hover:opacity-80">
@@ -134,5 +131,6 @@ export default function AboutPage() {
         </div>
       </div>
     </div>
+    </>
   );
 }

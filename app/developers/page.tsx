@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import PssTopBar from '@/components/PssTopBar';
 import type { Metadata } from 'next';
 import { LogoMark } from '@/components/Logo';
 import { API_FUNCTIONS } from '@/lib/apiDocs';
@@ -11,11 +12,10 @@ export const metadata: Metadata = {
 
 export default function DevelopersPage() {
   return (
+    <>
+      <PssTopBar current="/developers" />
     <div className="min-h-full overflow-auto bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-100">
       <div className="mx-auto max-w-3xl px-6 py-12">
-        <Link href="/" className="text-sm font-medium text-indigo-500 hover:text-indigo-400 dark:text-indigo-400">
-          ← Back to the editor
-        </Link>
 
         <div className="mt-8 flex items-center gap-4">
           <Link href="/" title="Dastavej — back to home" className="transition hover:opacity-80">
@@ -178,6 +178,7 @@ console.log(results.map((r) => r.text).join('\\n\\n'));`}
         </div>
       </div>
     </div>
+    </>
   );
 }
 
