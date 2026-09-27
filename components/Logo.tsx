@@ -1,34 +1,28 @@
 'use client';
 
-import { useId } from 'react';
-
 /**
- * Dastavej logo mark: a document with a folded corner and an amber pencil,
- * on an indigo→violet gradient tile. Inline SVG so it ships with the bundle
- * and stays crisp at every size. Source of truth for exports: brand/.
+ * Dastavej logo mark: the brand guidelines' "file" glyph, white on the Dastavej
+ * accent -- the same tile the Prabhas SaaS website, the Products menu and every
+ * app switcher use (PrabhasSaaS-Website shared/pss-apps.json). Inline SVG so it
+ * ships with the bundle and stays crisp at every size.
  */
 export function LogoMark({ className = 'h-10 w-10' }: { className?: string }) {
-  const id = useId();
   return (
     <svg className={className} viewBox="0 0 64 64" role="img" aria-label="Dastavej logo">
-      <defs>
-        <linearGradient id={`${id}-bg`} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#6366f1" />
-          <stop offset="1" stopColor="#8b5cf6" />
-        </linearGradient>
-      </defs>
-      <rect width="64" height="64" rx="14" fill={`url(#${id}-bg)`} />
-      <path
-        d="M20 13h15l9 9v26a3 3 0 0 1-3 3H20a3 3 0 0 1-3-3V16a3 3 0 0 1 3-3Z"
-        fill="#ffffff"
-      />
-      <path d="M35 13l9 9h-9z" fill="#c7d2fe" />
-      <rect x="22" y="28" width="17" height="3.2" rx="1.6" fill="#a5b4fc" />
-      <rect x="22" y="35" width="12" height="3.2" rx="1.6" fill="#c7d2fe" />
-      <g transform="translate(45 33) rotate(45)">
-        <rect x="-3.4" y="-3" width="6.8" height="3.4" rx="1.4" fill="#fde68a" />
-        <rect x="-3.4" y="0.8" width="6.8" height="15" rx="1.2" fill="#f59e0b" />
-        <path d="M-3.4 15.8 L0 22 L3.4 15.8 Z" fill="#78350f" />
+      <rect width="64" height="64" rx="14" fill="#6366f1" />
+      <g
+        transform="translate(14 14) scale(1.5)"
+        fill="none"
+        stroke="#ffffff"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
+        <path d="M14 2v4a2 2 0 0 0 2 2h4" />
+        <path d="M10 9H8" />
+        <path d="M16 13H8" />
+        <path d="M16 17H8" />
       </g>
     </svg>
   );
