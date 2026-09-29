@@ -7,6 +7,8 @@ import {
   useEffect,
   useMemo,
   useReducer,
+  useRef,
+  useState,
   type ReactNode,
 } from 'react';
 import {
@@ -21,8 +23,14 @@ import {
   type TextEdit,
   type WorkspaceState,
 } from './types';
-import { clearCache, clearCacheExcept, loadIntoCache } from './pdfCache';
-import { sanitizeEncryptedPdf } from './pdfLoad';
+import { clearCache, clearCacheExcept, isPasswordError, isWrongPassword, loadIntoCache } from './pdfCache';
+import { decryptPdf, sanitizeEncryptedPdf } from './pdfLoad';
+
+/** A dropped file that turned out to need an open password before it loads. */
+export interface LockedFile {
+  name: string;
+  bytes: Uint8Array;
+}
 
 const initialState: WorkspaceState = {
   sources: {},
@@ -361,6 +369,12 @@ interface StoreValue {
   replaceWorkspace: (name: string, bytes: Uint8Array) => Promise<void>;
   /** Add an in-memory generated PDF (e.g. a form built by the wizard). */
   addGeneratedPdf: (name: string, bytes: Uint8Array) => Promise<void>;
+  /** Files that need an open password before they can load; [0] is the one being asked about. */
+  locked: LockedFile[];
+  /** Try a password for `locked[0]`. Resolves to null on success, else a message to show. */
+  unlockFile: (password: string) => Promise<string | null>;
+  /** Give up on `locked[0]`. */
+  cancelLocked: () => void;
   clearAll: () => void;
   undo: () => void;
   redo: () => void;
@@ -374,6 +388,12 @@ export function PdfProvider({ children }: { children: ReactNode }) {
   const [history, dispatchHistory] = useReducer(historyReducer, initialHistory);
   const state = history.present;
   const dispatch: React.Dispatch<Action> = dispatchHistory;
+
+  // Files waiting on an open password. Kept out of the undo/redo reducer on
+  // purpose — undoing an edit should never resurrect a password prompt.
+  const [locked, setLocked] = useState<LockedFile[]>([]);
+  const lockedRef = useRef<LockedFile[]>(locked);
+  lockedRef.current = locked;
 
   const undo = useCallback(() => dispatchHistory({ type: 'UNDO' }), []);
   const redo = useCallback(() => dispatchHistory({ type: 'REDO' }), []);
@@ -414,6 +434,14 @@ export function PdfProvider({ children }: { children: ReactNode }) {
         const numPages = await loadIntoCache(id, bytes);
         dispatch({ type: 'ADD_SOURCE', source: { id, name: file.name, bytes, numPages } });
       } catch (err) {
+        // Needs an open password — not an error, just something only the
+        // user can supply. Queue it so the UI can ask, and keep going with
+        // any other files in the same drop.
+        if (isPasswordError(err)) {
+          const bytes = new Uint8Array(await file.arrayBuffer());
+          setLocked((q) => [...q, { name: file.name, bytes }]);
+          continue;
+        }
         dispatch({
           type: 'SET_ERROR',
           error: `Could not open "${file.name}": ${err instanceof Error ? err.message : String(err)}`,
@@ -421,6 +449,49 @@ export function PdfProvider({ children }: { children: ReactNode }) {
       }
     }
   }, []);
+
+  /**
+   * Try to open the file currently waiting on a password. Returns null on
+   * success (the file becomes a normal source and leaves the queue), or a
+   * message to show next to the password box if it didn't work.
+   *
+   * The password is used to decrypt the bytes once, here — the workspace
+   * only ever stores the decrypted result, so the password itself is never
+   * retained and every downstream tool works on a plain PDF.
+   */
+  const unlockFile = useCallback(async (password: string): Promise<string | null> => {
+    const pending = lockedRef.current[0];
+    if (!pending) return null;
+    try {
+      const bytes = await decryptPdf(pending.bytes, password);
+      const id = uid();
+      const numPages = await loadIntoCache(id, bytes);
+      dispatch({ type: 'ADD_SOURCE', source: { id, name: pending.name, bytes, numPages } });
+      setLocked((q) => q.slice(1));
+      return null;
+    } catch (err) {
+      if (isWrongPassword(err) || isPasswordError(err)) return 'Wrong password — try again.';
+      // pdf-lib couldn't decrypt, but the password may still be right; let
+      // pdf.js (far more tolerant) try to at least open it for viewing.
+      try {
+        const id = uid();
+        const numPages = await loadIntoCache(id, pending.bytes, password);
+        dispatch({
+          type: 'ADD_SOURCE',
+          source: { id, name: pending.name, bytes: pending.bytes, numPages },
+        });
+        setLocked((q) => q.slice(1));
+        return null;
+      } catch (viewErr) {
+        return isPasswordError(viewErr)
+          ? 'Wrong password — try again.'
+          : `Could not open this PDF: ${viewErr instanceof Error ? viewErr.message : String(viewErr)}`;
+      }
+    }
+  }, []);
+
+  /** Give up on the file currently waiting on a password. */
+  const cancelLocked = useCallback(() => setLocked((q) => q.slice(1)), []);
 
   const replaceWorkspace = useCallback(async (name: string, bytes: Uint8Array) => {
     const id = uid();
@@ -448,13 +519,16 @@ export function PdfProvider({ children }: { children: ReactNode }) {
       addFiles,
       replaceWorkspace,
       addGeneratedPdf,
+      locked,
+      unlockFile,
+      cancelLocked,
       clearAll,
       undo,
       redo,
       canUndo: history.past.length > 0,
       canRedo: history.future.length > 0,
     }),
-    [state, addFiles, replaceWorkspace, addGeneratedPdf, clearAll, undo, redo, history.past.length, history.future.length],
+    [state, addFiles, replaceWorkspace, addGeneratedPdf, locked, unlockFile, cancelLocked, clearAll, undo, redo, history.past.length, history.future.length],
   );
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

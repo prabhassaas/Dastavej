@@ -93,11 +93,9 @@ function drawStyledText(
 /**
  * True when the working document is exactly one untouched source file: same
  * pages, same order, no rotation, no text edits, no annotations, no marks.
- * In that case the original bytes ARE the correct output — skipping the
- * pdf-lib rebuild avoids a real-world pdf-lib limitation where an encrypted
- * source's content streams get corrupted by copyPages/save even after
- * `ignoreEncryption`, and it's strictly more faithful anyway (no lossy
- * re-encoding of an already-correct file).
+ * In that case the original bytes ARE the correct output, so returning them
+ * as-is is both faster and strictly more faithful than rebuilding — no lossy
+ * re-encoding of a file that was already right.
  */
 function isUnmodifiedSingleSource(
   sources: Record<string, SourceFile>,

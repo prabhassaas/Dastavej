@@ -7,12 +7,24 @@ import { PDFDocument, type LoadOptions } from '@cantoo/pdf-lib';
  * else, including this app's own pdf.js-based viewer. pdf-lib refuses to
  * load ANY encrypted PDF unless told otherwise, so every write/edit path
  * needs this rather than the plain `PDFDocument.load`.
+ *
+ * Tries a real empty-password decrypt first and only falls back to
+ * `ignoreEncryption`, because the two are not equivalent: `ignoreEncryption`
+ * merely silences the check and leaves content streams encrypted, so pages
+ * copied out of such a document come out blank. An empty password is safe
+ * on unencrypted files too (verified), so the fast path costs nothing.
  */
-export function loadPdf(
+export async function loadPdf(
   bytes: string | Uint8Array | ArrayBuffer,
   opts: LoadOptions = {},
 ): Promise<PDFDocument> {
-  return PDFDocument.load(bytes, { ignoreEncryption: true, ...opts });
+  try {
+    return await PDFDocument.load(bytes, { password: '', ...opts });
+  } catch {
+    // Needs a real open password, or pdf-lib tripped on some quirk — behave
+    // no worse than before and let the caller surface any failure.
+    return PDFDocument.load(bytes, { ignoreEncryption: true, ...opts });
+  }
 }
 
 /**
@@ -27,28 +39,44 @@ function looksEncrypted(bytes: Uint8Array): boolean {
 }
 
 /**
- * If `bytes` is an encrypted PDF, decrypt it once and return clean,
- * unencrypted bytes; otherwise returns `bytes` unchanged. `ignoreEncryption`
- * alone isn't enough for correctness: pdf-lib's page-copying path
- * (`copyPages`, used by nearly every write operation via `assemblePdf`)
- * copies encrypted content streams verbatim without decrypting them,
- * silently corrupting the result (garbled/empty text on export). Re-saving
- * the SAME loaded document — no `copyPages`, no new document — forces every
- * stream through pdf-lib's decrypt-on-read path, producing genuinely clean
- * bytes. Call this once at upload time, before bytes enter the workspace,
- * so every downstream operation just works on plain bytes.
+ * Decrypt an encrypted PDF into genuinely plain bytes, given its open
+ * password (`''` for the very common owner-password/permissions-only case,
+ * where no password is needed to open the file at all).
  *
- * This is deliberately best-effort and never blocks the upload: pdf-lib's
- * parser is far less tolerant of real-world PDF quirks than pdf.js (which
- * does the actual viewing/rendering), so any failure here — encrypted or
- * not — just falls back to the original bytes rather than surfacing a
- * confusing pdf-lib error for a file that would otherwise open fine.
+ * Passing a real `password` matters — it is NOT interchangeable with
+ * `ignoreEncryption: true`. The latter only silences pdf-lib's "this is
+ * encrypted" check; content streams stay encrypted, so the file reads fine
+ * once but comes out empty/garbled the moment anything copies pages out of
+ * it (which `assemblePdf` does for every edit/merge/reorder). Decrypting
+ * with a password instead produces output that survives a full `copyPages`
+ * round-trip intact — verified against AES-128 files with both an open
+ * password and owner-password-only restrictions.
+ *
+ * Throws if the password is wrong or the file can't be parsed.
+ */
+export async function decryptPdf(bytes: Uint8Array, password = ''): Promise<Uint8Array> {
+  const doc = await PDFDocument.load(bytes, { password });
+  return doc.save();
+}
+
+/**
+ * If `bytes` is an encrypted PDF that opens without a password (owner
+ * password / permissions restrictions only — bank statements, HR and
+ * government forms that block printing or copying), decrypt it once so
+ * every downstream operation sees plain bytes. Returns `bytes` unchanged
+ * for anything else.
+ *
+ * Deliberately best-effort and never blocks the upload: pdf-lib's parser is
+ * far less tolerant of real-world PDF quirks than pdf.js (which does the
+ * actual viewing), so any failure just falls back to the original bytes.
+ * A file that needs a real open password lands here too and fails the
+ * empty-password attempt — that's expected, and pdf.js then reports it as
+ * needing a password so the UI can prompt for one.
  */
 export async function sanitizeEncryptedPdf(bytes: Uint8Array): Promise<Uint8Array> {
   if (!looksEncrypted(bytes)) return bytes;
   try {
-    const doc = await PDFDocument.load(bytes, { ignoreEncryption: true });
-    return await doc.save();
+    return await decryptPdf(bytes, '');
   } catch {
     return bytes;
   }

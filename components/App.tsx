@@ -16,6 +16,7 @@ import OcrPanel from './OcrPanel';
 import AiPanel from './AiPanel';
 import ReadAloudPanel from './ReadAloudPanel';
 import ErrorToast from './ErrorToast';
+import PasswordPrompt from './PasswordPrompt';
 import SplashScreen from './SplashScreen';
 import { LogoMark } from './Logo';
 import {
@@ -200,6 +201,7 @@ function Workspace() {
       </footer>
 
       <ErrorToast />
+      <PasswordPrompt />
     </div>
   );
 }
