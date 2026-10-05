@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { getPdfjs } from '@/lib/pdfjs';
-import { PrabhasSaasLockup } from './PrabhasSaasLogo';
 import { MadeInIndia } from './IndiaBadge';
 
 const MIN_VISIBLE_MS = 1100; // don't flash even if everything loads instantly
@@ -94,7 +93,6 @@ export default function SplashScreen() {
           <span className="text-[10px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">
             Powered by
           </span>
-          <PrabhasSaasLockup className="h-10" />
         </div>
 
         <MadeInIndia className="text-xs font-medium text-slate-500 dark:text-slate-400" />
