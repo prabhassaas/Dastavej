@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { getPdfjs } from '@/lib/pdfjs';
-import { PrabhasSaasLockup } from './PrabhasSaasLogo';
 import { MadeInIndia } from './IndiaBadge';
 
 const MIN_VISIBLE_MS = 1100; // don't flash even if everything loads instantly
@@ -90,13 +89,6 @@ export default function SplashScreen() {
         className="mx-6 flex w-full max-w-[480px] flex-col items-center justify-center gap-4 rounded-2xl border border-slate-200 bg-white px-8 shadow-2xl dark:border-slate-800 dark:bg-slate-900"
         style={{ aspectRatio: '2 / 1' }}
       >
-        <div className="flex flex-col items-center gap-1">
-          <span className="text-[10px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">
-            Powered by
-          </span>
-          <PrabhasSaasLockup className="h-16" />
-        </div>
-
         <MadeInIndia className="text-xs font-medium text-slate-500 dark:text-slate-400" />
 
         <div className="mt-1 w-full max-w-[220px]">
