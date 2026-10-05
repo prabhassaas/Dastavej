@@ -17,7 +17,6 @@ import AiPanel from './AiPanel';
 import ReadAloudPanel from './ReadAloudPanel';
 import ErrorToast from './ErrorToast';
 import PasswordPrompt from './PasswordPrompt';
-import SplashScreen from './SplashScreen';
 import { LogoMark } from './Logo';
 import {
   IconConvert,
@@ -210,7 +209,6 @@ export default function App() {
   return (
     <ThemeProvider>
       <PdfProvider>
-        <SplashScreen />
         <Workspace />
       </PdfProvider>
     </ThemeProvider>
