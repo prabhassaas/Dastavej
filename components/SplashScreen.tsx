@@ -93,6 +93,11 @@ export default function SplashScreen() {
           <span className="text-[10px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">
             Powered by
           </span>
+          <img
+            src="/brand/prabhas-saas-logo.svg"
+            alt="Prabhas SaaS"
+            className="h-24 w-auto object-contain"
+          />
         </div>
 
         <MadeInIndia className="text-xs font-medium text-slate-500 dark:text-slate-400" />
