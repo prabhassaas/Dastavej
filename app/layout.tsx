@@ -19,6 +19,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="h-full bg-slate-100 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100">
         {children}
+        <script defer src="/vyasa/assistant.js" data-vyasa-app="dastavej" data-vyasa-accent="#4F46E5" data-vyasa-side="left" />
         <AiChatWidget />
       </body>
     </html>
