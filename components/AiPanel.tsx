@@ -178,6 +178,7 @@ export default function AiPanel() {
   // ── Chat with this document (RAG) ────────────────────────────────────────
   // Consent is never persisted or inherited when a different PDF is opened.
   const [docAiConsent, setDocAiConsent] = useState(false);
+  const docAiGeneration = useRef(0);
   const [ragIndex, setRagIndex] = useState<RagChunk[] | null>(null);
   const [ragBuilding, setRagBuilding] = useState(false);
   const [ragStatus, setRagStatus] = useState('');
@@ -186,6 +187,7 @@ export default function AiPanel() {
   const [ragHistory, setRagHistory] = useState<{ question: string; answer: string; sources: string[] }[]>([]);
 
   useEffect(() => {
+    docAiGeneration.current += 1;
     setDocAiConsent(false);
     setRagIndex(null);
     setRagHistory([]);
@@ -194,6 +196,7 @@ export default function AiPanel() {
 
   const buildDocIndex = async () => {
     if (!docAiConsent || ragBuilding) return;
+    const generation = docAiGeneration.current;
     setRagBuilding(true);
     setRagStatus('Reading document text…');
     setRagIndex(null);
@@ -204,6 +207,7 @@ export default function AiPanel() {
         marks: state.marks,
       });
       const pages = await extractAllText(bytes);
+      if (generation !== docAiGeneration.current) return;
       const nonEmpty = pages
         .map((text, i) => ({ text, source: `Page ${i + 1}` }))
         .filter((p) => p.text.trim());
@@ -215,6 +219,7 @@ export default function AiPanel() {
       const index = await buildRagIndex(nonEmpty, (done, total) =>
         setRagStatus(`Embedding chunks… ${done}/${total}`),
       );
+      if (generation !== docAiGeneration.current) return;
       setRagIndex(index);
       setRagStatus('');
     } catch (err) {
@@ -230,11 +235,13 @@ export default function AiPanel() {
 
   const askDoc = async () => {
     if (!docAiConsent || !ragIndex || !ragQuestion.trim() || ragAsking) return;
+    const generation = docAiGeneration.current;
     const question = ragQuestion.trim();
     setRagQuestion('');
     setRagAsking(true);
     try {
       const top = await searchRagIndex(ragIndex, question, 5);
+      if (generation !== docAiGeneration.current) return;
       const context = formatContext(top);
       const answer = await aiChat([
         {
@@ -246,6 +253,7 @@ export default function AiPanel() {
         },
         { role: 'user', content: `Document excerpts:\n${context}\n\nQuestion: ${question}` },
       ]);
+      if (generation !== docAiGeneration.current) return;
       setRagHistory((h) => [
         ...h,
         { question, answer: answer.trim(), sources: [...new Set(top.map((c) => c.source ?? '').filter(Boolean))] },
