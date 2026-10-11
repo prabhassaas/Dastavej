@@ -176,6 +176,9 @@ export default function AiPanel() {
   };
 
   // ── Chat with this document (RAG) ────────────────────────────────────────
+  // Consent is never persisted or inherited when a different PDF is opened.
+  const [docAiConsent, setDocAiConsent] = useState(false);
+  const docAiGeneration = useRef(0);
   const [ragIndex, setRagIndex] = useState<RagChunk[] | null>(null);
   const [ragBuilding, setRagBuilding] = useState(false);
   const [ragStatus, setRagStatus] = useState('');
@@ -183,7 +186,17 @@ export default function AiPanel() {
   const [ragAsking, setRagAsking] = useState(false);
   const [ragHistory, setRagHistory] = useState<{ question: string; answer: string; sources: string[] }[]>([]);
 
+  useEffect(() => {
+    docAiGeneration.current += 1;
+    setDocAiConsent(false);
+    setRagIndex(null);
+    setRagHistory([]);
+    setRagQuestion('');
+  }, [state.sources]);
+
   const buildDocIndex = async () => {
+    if (!docAiConsent || ragBuilding) return;
+    const generation = docAiGeneration.current;
     setRagBuilding(true);
     setRagStatus('Reading document text…');
     setRagIndex(null);
@@ -194,6 +207,7 @@ export default function AiPanel() {
         marks: state.marks,
       });
       const pages = await extractAllText(bytes);
+      if (generation !== docAiGeneration.current) return;
       const nonEmpty = pages
         .map((text, i) => ({ text, source: `Page ${i + 1}` }))
         .filter((p) => p.text.trim());
@@ -205,6 +219,7 @@ export default function AiPanel() {
       const index = await buildRagIndex(nonEmpty, (done, total) =>
         setRagStatus(`Embedding chunks… ${done}/${total}`),
       );
+      if (generation !== docAiGeneration.current) return;
       setRagIndex(index);
       setRagStatus('');
     } catch (err) {
@@ -219,12 +234,14 @@ export default function AiPanel() {
   };
 
   const askDoc = async () => {
-    if (!ragIndex || !ragQuestion.trim() || ragAsking) return;
+    if (!docAiConsent || !ragIndex || !ragQuestion.trim() || ragAsking) return;
+    const generation = docAiGeneration.current;
     const question = ragQuestion.trim();
     setRagQuestion('');
     setRagAsking(true);
     try {
       const top = await searchRagIndex(ragIndex, question, 5);
+      if (generation !== docAiGeneration.current) return;
       const context = formatContext(top);
       const answer = await aiChat([
         {
@@ -236,6 +253,7 @@ export default function AiPanel() {
         },
         { role: 'user', content: `Document excerpts:\n${context}\n\nQuestion: ${question}` },
       ]);
+      if (generation !== docAiGeneration.current) return;
       setRagHistory((h) => [
         ...h,
         { question, answer: answer.trim(), sources: [...new Set(top.map((c) => c.source ?? '').filter(Boolean))] },
@@ -566,12 +584,26 @@ export default function AiPanel() {
             locally first, then the AI answers only from the relevant excerpts — grounded in what
             the document actually says, instead of guessing.
           </p>
+          <label className="flex items-start gap-3 rounded-xl border border-amber-300/60 bg-amber-50 px-4 py-3 text-xs leading-relaxed text-amber-950 dark:border-amber-700/60 dark:bg-amber-900/25 dark:text-amber-100">
+            <input
+              type="checkbox"
+              checked={docAiConsent}
+              onChange={(e) => {
+                setDocAiConsent(e.target.checked);
+                if (!e.target.checked) { setRagIndex(null); setRagHistory([]); }
+              }}
+              className="mt-0.5 h-4 w-4 shrink-0 accent-indigo-600"
+            />
+            <span>
+              <strong>Explicit AI data-sharing consent.</strong> Indexing extracts text from this PDF and sends the text in chunks to the AI endpoint you configured for embeddings. Asking a question sends relevant excerpts to that endpoint too. Choose a local model to keep text on your computer. Do not enable this for confidential files unless your chosen endpoint is approved to receive them. Core PDF editing remains entirely in your browser.
+            </span>
+          </label>
           {state.pages.length === 0 ? (
             <p className="text-xs text-amber-600 dark:text-amber-400/80">Open a PDF first.</p>
           ) : !ragIndex ? (
             <button
               onClick={() => void buildDocIndex()}
-              disabled={ragBuilding}
+              disabled={ragBuilding || !docAiConsent}
               className="flex items-center gap-2 rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-400 disabled:opacity-50"
             >
               {ragBuilding ? <IconSpinner className="h-4 w-4" /> : <IconSparkle className="h-4 w-4" />}
@@ -613,7 +645,7 @@ export default function AiPanel() {
                 />
                 <button
                   onClick={() => void askDoc()}
-                  disabled={ragAsking || !ragQuestion.trim()}
+                  disabled={!docAiConsent || ragAsking || !ragQuestion.trim()}
                   className="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-400 disabled:opacity-50"
                 >
                   Ask

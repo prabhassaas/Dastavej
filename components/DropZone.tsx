@@ -61,7 +61,7 @@ export default function DropZone({ fullScreen = false }: { fullScreen?: boolean 
         </div>
         <p className="flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500">
           <IconShield className="h-3.5 w-3.5 text-emerald-500 dark:text-emerald-400" />
-          Processed entirely in your browser. Nothing is uploaded, ever.
+          PDF editing runs entirely in your browser. Optional AI tools can send text to the endpoint you choose, after you opt in.
         </p>
         <input
           ref={inputRef}

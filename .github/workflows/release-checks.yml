@@ -1,0 +1,22 @@
+name: Dastavej release checks
+on:
+  push:
+  pull_request:
+jobs:
+  privacy-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Privacy regression
+        run: node --test tests/privacy-disclosure.test.mjs
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Production build
+        run: npm run build
