@@ -176,6 +176,8 @@ export default function AiPanel() {
   };
 
   // ── Chat with this document (RAG) ────────────────────────────────────────
+  // Consent is never persisted or inherited when a different PDF is opened.
+  const [docAiConsent, setDocAiConsent] = useState(false);
   const [ragIndex, setRagIndex] = useState<RagChunk[] | null>(null);
   const [ragBuilding, setRagBuilding] = useState(false);
   const [ragStatus, setRagStatus] = useState('');
@@ -183,7 +185,15 @@ export default function AiPanel() {
   const [ragAsking, setRagAsking] = useState(false);
   const [ragHistory, setRagHistory] = useState<{ question: string; answer: string; sources: string[] }[]>([]);
 
+  useEffect(() => {
+    setDocAiConsent(false);
+    setRagIndex(null);
+    setRagHistory([]);
+    setRagQuestion('');
+  }, [state.sources]);
+
   const buildDocIndex = async () => {
+    if (!docAiConsent || ragBuilding) return;
     setRagBuilding(true);
     setRagStatus('Reading document text…');
     setRagIndex(null);
@@ -219,7 +229,7 @@ export default function AiPanel() {
   };
 
   const askDoc = async () => {
-    if (!ragIndex || !ragQuestion.trim() || ragAsking) return;
+    if (!docAiConsent || !ragIndex || !ragQuestion.trim() || ragAsking) return;
     const question = ragQuestion.trim();
     setRagQuestion('');
     setRagAsking(true);
@@ -566,12 +576,26 @@ export default function AiPanel() {
             locally first, then the AI answers only from the relevant excerpts — grounded in what
             the document actually says, instead of guessing.
           </p>
+          <label className="flex items-start gap-3 rounded-xl border border-amber-300/60 bg-amber-50 px-4 py-3 text-xs leading-relaxed text-amber-950 dark:border-amber-700/60 dark:bg-amber-900/25 dark:text-amber-100">
+            <input
+              type="checkbox"
+              checked={docAiConsent}
+              onChange={(e) => {
+                setDocAiConsent(e.target.checked);
+                if (!e.target.checked) { setRagIndex(null); setRagHistory([]); }
+              }}
+              className="mt-0.5 h-4 w-4 shrink-0 accent-indigo-600"
+            />
+            <span>
+              <strong>Explicit AI data-sharing consent.</strong> Indexing extracts text from this PDF and sends the text in chunks to the AI endpoint you configured for embeddings. Asking a question sends relevant excerpts to that endpoint too. Choose a local model to keep text on your computer. Do not enable this for confidential files unless your chosen endpoint is approved to receive them. Core PDF editing remains entirely in your browser.
+            </span>
+          </label>
           {state.pages.length === 0 ? (
             <p className="text-xs text-amber-600 dark:text-amber-400/80">Open a PDF first.</p>
           ) : !ragIndex ? (
             <button
               onClick={() => void buildDocIndex()}
-              disabled={ragBuilding}
+              disabled={ragBuilding || !docAiConsent}
               className="flex items-center gap-2 rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-400 disabled:opacity-50"
             >
               {ragBuilding ? <IconSpinner className="h-4 w-4" /> : <IconSparkle className="h-4 w-4" />}
@@ -613,7 +637,7 @@ export default function AiPanel() {
                 />
                 <button
                   onClick={() => void askDoc()}
-                  disabled={ragAsking || !ragQuestion.trim()}
+                  disabled={!docAiConsent || ragAsking || !ragQuestion.trim()}
                   className="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-400 disabled:opacity-50"
                 >
                   Ask
