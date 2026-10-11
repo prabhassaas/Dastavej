@@ -19,7 +19,8 @@
   var accent = (script && script.dataset.vyasaAccent) || '#7A1F2B';
   if (!/^#[0-9a-fA-F]{6}$/.test(accent)) accent = '#7A1F2B';
   var side = script && script.dataset.vyasaSide === 'left' ? 'left' : 'right';
-  var endpoint = 'https://ezgfvvqwokxvqmheijmd.supabase.co/functions/v1/vyasa-chat';
+  var localEndpoint = script && script.dataset.vyasaEndpoint === '/api/vyasa';
+  var endpoint = localEndpoint ? '/api/vyasa' : 'https://ezgfvvqwokxvqmheijmd.supabase.co/functions/v1/vyasa-chat';
   var icon = 'https://www.prabhassaas.in/images/ai/vyasa-1.0.png';
   var host = document.createElement('div');
   host.id = 'prabhas-vyasa-assistant';
@@ -62,7 +63,7 @@ button,input{font:inherit}button{cursor:pointer}
   root.appendChild(trigger);
   var panel = document.createElement('section');panel.className='vy-panel';panel.setAttribute('role','dialog');
   panel.setAttribute('aria-label','Vyasa AI for '+name);panel.dataset.open='0';
-  panel.innerHTML='<div class="vy-head"><img alt="Vyasa AI"><div><div class="vy-title">Vyasa 1.0</div><div class="vy-sub"></div></div><span class="vy-spacer"></span><button class="vy-icon" type="button" data-action="new" aria-label="Start new conversation" title="New conversation">↺</button><button class="vy-icon" type="button" data-action="close" aria-label="Close assistant">×</button></div><div class="vy-messages" role="log" aria-live="polite" aria-relevant="additions"></div><form class="vy-foot"><input class="vy-input" autocomplete="off" maxlength="4000" aria-label="Your question" placeholder="Ask about '+name+'…" required><button class="vy-send" type="submit">Send</button></form><p class="vy-note">Answers are guidance, not a live check of your records.</p>';
+  panel.innerHTML='<div class="vy-head"><img alt="Vyasa AI"><div><div class="vy-title">Vyasa 1.0</div><div class="vy-sub"></div></div><span class="vy-spacer"></span><button class="vy-icon" type="button" data-action="new" aria-label="Start new conversation" title="New conversation">↺</button><button class="vy-icon" type="button" data-action="close" aria-label="Close assistant">×</button></div><div class="vy-messages" role="log" aria-live="polite" aria-relevant="additions"></div><form class="vy-foot"><input class="vy-input" autocomplete="off" maxlength="4000" aria-label="Your question" placeholder="Ask about '+name+'…" required><button class="vy-send" type="submit">Send</button></form><p class="vy-note">Questions you type are sent to Vyasa. Your documents and records are not read automatically.</p>';
   panel.querySelector('.vy-head img').src=icon;
   panel.querySelector('.vy-sub').textContent=name+' · Prabhas SaaS';
   root.appendChild(panel);
@@ -71,10 +72,13 @@ button,input{font:inherit}button{cursor:pointer}
   var guestKey='prabhas-vyasa:'+app+':guest';
   // Ephemeral history stays in memory. No raw chat stored in localStorage.
   function context(){
-    var h=document.querySelector('main h1,main h2,[role="main"] h1,h1');
+    // No DOM text: headings can contain customer names, invoice numbers or
+    // private document titles. Only allow stable, non-sensitive route labels.
+    var allowed=/^(dashboard|home|inventory|stock|products|sales|pos|purchases|purchase|returns|invoices|invoice|payments|ledger|accounting|reports|gst|tax|documents|pdf|editor|design|drawing|layers|settings|profile|billing|subscriptions|users|integrations|warehouse|warehouses|register|transactions|forms|ocr|history|analytics|support|clients|vendors|parties|banking|materials|projects|canvas|help|admin|account|subscription|receipts|pricing)$/;
+    var parts=location.pathname.toLowerCase().split('/').filter(Boolean).slice(0,3);
+    var route=parts.filter(function(p){return allowed.test(p)}).slice(0,2);
     return {surface:'apps',site:'prabhassaas',app:app,app_key:app,
-      path:location.pathname.slice(0,240),title:(document.title||'').slice(0,180),
-      heading:(h?h.textContent:'').trim().slice(0,180)};
+      path:'/'+route.join('/'),title:name,heading:route.join(' / ')};
   }
   async function token(){
     try{
@@ -98,7 +102,7 @@ button,input{font:inherit}button{cursor:pointer}
     var res=await fetch(endpoint,{method:'POST',headers:headers,body:JSON.stringify(body)});
     var data=await res.json().catch(function(){return {}});
     if(!res.ok||data.ok===false)throw Error(data.message||data.error||'Vyasa is temporarily unavailable.');
-    return {data:data,authenticated:!!auth};
+    return {data:data,authenticated:!!auth || (localEndpoint && data.authenticated===true)};
   }
   function bubble(role,text){
     var el=document.createElement('div');
@@ -127,10 +131,11 @@ button,input{font:inherit}button{cursor:pointer}
     if(!loaded){
       loaded=true;
       var sess=await token();authWasPresent=!!sess;
-      if(sess){
+      if(sess || localEndpoint){
         try{
           var result=await request({action:'history',context:context()});
           conversationId=result.data.conversation_id||null;
+          authWasPresent=result.authenticated;
           var stored=result.data.messages||[];
           for(var m of stored.slice(-25))if(m.role==='user'||m.role==='assistant')bubble(m.role,String(m.content||''));
         }catch(_){}
@@ -151,14 +156,14 @@ button,input{font:inherit}button{cursor:pointer}
     var q=input.value.trim();if(!q)return;input.value='';busy=true;send.disabled=true;input.disabled=true;
     bubble('user',q);var pending=bubble('assistant','Thinking…');
     try{
-      var current=await token();if(authWasPresent&&!current){history=[];conversationId=null;messages.replaceChildren();bubble('assistant','Please sign in again to continue your private conversation.');return;}
+      var current=await token();if(authWasPresent&&!current&&!localEndpoint){history=[];conversationId=null;messages.replaceChildren();bubble('assistant','Please sign in again to continue your private conversation.');return;}
       var response=await request({action:'message',message:q,conversation_id:conversationId,
-        context:context(),ephemeral_history:current?[]:history.slice(-12)});
+        context:context(),ephemeral_history:(current||localEndpoint&&authWasPresent)?[]:history.slice(-12)});
       pending.textContent=String(response.data.reply||'No response');
       conversationId=response.data.conversation_id||conversationId;
-      authWasPresent=authWasPresent||!!current;
-      if(!current){history.push({role:'user',content:q},{role:'assistant',content:pending.textContent});history=history.slice(-12);}
-      if(current)feedback(response.data.interaction_id);
+      authWasPresent=authWasPresent||response.authenticated;
+      if(!response.authenticated){history.push({role:'user',content:q},{role:'assistant',content:pending.textContent});history=history.slice(-12);}
+      if(response.authenticated)feedback(response.data.interaction_id);
     }catch(err){pending.textContent=err instanceof Error?err.message:'Could not contact Vyasa.';}
     finally{busy=false;send.disabled=false;input.disabled=false;input.focus();messages.scrollTop=messages.scrollHeight;}
   });
