@@ -43,6 +43,23 @@ button,input{font:inherit}button{cursor:pointer}
 .vy-messages{display:flex;flex-direction:column;align-items:stretch;gap:10px;overflow-y:auto;flex:1;padding:14px;background:#fbfaf8;overscroll-behavior:contain}
 .vy-bubble{align-self:flex-start;max-width:94%;white-space:pre-wrap;overflow-wrap:anywhere;padding:10px 12px;border-radius:13px;background:#fff;border:1px solid #ebe8e3;font-size:13px}
 .vy-bubble[data-role="user"]{align-self:flex-end;background:var(--vyasa-accent);color:#fff;border-color:transparent}
+
+.vy-bubble[data-role="assistant"]{white-space:normal;line-height:1.55}
+.vy-bubble .vy-content>*:first-child{margin-top:0}
+.vy-bubble .vy-content>*:last-child{margin-bottom:0}
+.vy-content p{margin:0 0 9px;white-space:pre-wrap}
+.vy-content h3,.vy-content h4{font-size:13px;line-height:1.4;margin:12px 0 6px;font-weight:750;color:#222732}
+.vy-content ul,.vy-content ol{padding-left:20px;margin:4px 0 10px}
+.vy-content li{padding-left:2px;margin:3px 0;white-space:pre-wrap}
+.vy-content strong{font-weight:750}
+.vy-content code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.94em;background:#f3f3f5;border-radius:4px;padding:1px 3px}
+.vy-content pre{white-space:pre;overflow:auto;background:#f3f3f5;border-radius:8px;padding:9px;margin:6px 0 10px}
+.vy-content pre code{background:none;padding:0}
+.vy-table-wrap{max-width:100%;overflow-x:auto;margin:7px 0 10px;border:1px solid #e8e5e1;border-radius:8px}
+.vy-content table{border-collapse:collapse;min-width:100%;font-size:12px}
+.vy-content th,.vy-content td{text-align:left;vertical-align:top;padding:7px 9px;border-bottom:1px solid #e8e5e1;white-space:pre-wrap}
+.vy-content th{background:#f7f6f4;font-weight:750}
+.vy-content tr:last-child td{border-bottom:0}
 .vy-small{font-size:11px;color:#69707d;padding:2px 4px}
 .vy-feedback{display:flex;gap:5px;justify-content:flex-start;margin:-6px 0 0 0}
 .vy-feedback button{border:1px solid #d9d4cf;background:#fff;border-radius:7px;color:#555;padding:4px 7px;font-size:13px}
@@ -104,9 +121,77 @@ button,input{font:inherit}button{cursor:pointer}
     if(!res.ok||data.ok===false)throw Error(data.message||data.error||'Vyasa is temporarily unavailable.');
     return {data:data,authenticated:!!auth || (localEndpoint && data.authenticated===true)};
   }
+
+  // Deterministic, HTML-free presentation for new and historic assistant replies.
+  // Preserve the original text in memory: presentation must not rewrite the transcript.
+  function inlineText(parent, text) {
+    var pattern=/(\`[^\`]+\`|\*\*[^*\n]+\*\*)/g;
+    var cursor=0, match;
+    while((match=pattern.exec(text))){
+      if(match.index>cursor)parent.appendChild(document.createTextNode(text.slice(cursor,match.index)));
+      var raw=match[0], node=document.createElement(raw.slice(0,2)==='**'?'strong':'code');
+      node.textContent=raw.slice(raw.startsWith('**')?2:1,raw.startsWith('**')?-2:-1);
+      parent.appendChild(node);cursor=pattern.lastIndex;
+    }
+    if(cursor<text.length)parent.appendChild(document.createTextNode(text.slice(cursor)));
+  }
+  function formatAssistant(el, raw) {
+    el.replaceChildren(); el.dataset.rawContent=raw;
+    var box=document.createElement('div');box.className='vy-content';el.appendChild(box);
+    var lines=raw.replace(/\r\n?/g,'\n').split('\n'), i=0;
+    function add(tag,value){var node=document.createElement(tag);inlineText(node,value);box.appendChild(node);return node;}
+    while(i<lines.length){
+      var line=lines[i], trimmed=line.trim();
+      if(!trimmed){i++;continue;}
+      if(/^\`\`\`/.test(trimmed)){
+        var code=[],closed=false;i++;
+        while(i<lines.length){if(/^\`\`\`/.test(lines[i].trim())){closed=true;i++;break;}code.push(lines[i++]);}
+        var pre=document.createElement('pre'), c=document.createElement('code');c.textContent=code.join('\n');pre.appendChild(c);box.appendChild(pre);continue;
+      }
+      var heading=/^#{1,4}\s+(.+)$/.exec(trimmed);
+      if(heading){add('h3',heading[1]);i++;continue;}
+      var rule=/^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(lines[i+1]||'');
+      if(trimmed.includes('|')&&rule){
+        var headings=trimmed.replace(/^\||\|$/g,'').split('|').map(function(x){return x.trim()});
+        if(headings.length>1&&headings.length<=8){
+          var wrap=document.createElement('div'),table=document.createElement('table'),thead=document.createElement('thead'),tr=document.createElement('tr');
+          wrap.className='vy-table-wrap';headings.forEach(function(h){var th=document.createElement('th');inlineText(th,h);tr.appendChild(th)});
+          thead.appendChild(tr);table.appendChild(thead);i+=2;var tbody=document.createElement('tbody');
+          while(i<lines.length&&lines[i].includes('|')&&lines[i].trim()){
+            var cells=lines[i].trim().replace(/^\||\|$/g,'').split('|');
+            if(cells.length!==headings.length)break;
+            var row=document.createElement('tr');cells.forEach(function(v){var td=document.createElement('td');inlineText(td,v.trim());row.appendChild(td)});
+            tbody.appendChild(row);i++;
+          }
+          table.appendChild(tbody);wrap.appendChild(table);box.appendChild(wrap);continue;
+        }
+      }
+      var item=/^\s{0,3}([-*] |\d+[.)] )(.+)$/.exec(line);
+      if(item){
+        var ordered=/\d/.test(item[1][0]),list=document.createElement(ordered?'ol':'ul');box.appendChild(list);
+        while(i<lines.length){
+          var next=/^\s{0,3}([-*] |\d+[.)] )(.+)$/.exec(lines[i]);
+          if(!next||/\d/.test(next[1][0])!==ordered)break;
+          var li=document.createElement('li');inlineText(li,next[2]);list.appendChild(li);i++;
+        }
+        continue;
+      }
+      var paragraph=[line];i++;
+      while(i<lines.length&&lines[i].trim()&&!/^#{1,4}\s|^\s{0,3}(?:[-*] |\d+[.)] )|^\`\`\`/.test(lines[i])) {
+        if(lines[i].includes('|')&&/^\s*\|?\s*:?-{3,}:?/.test(lines[i+1]||''))break;
+        paragraph.push(lines[i++]);
+      }
+      add('p',paragraph.join('\n'));
+    }
+  }
+  function setBubbleText(el, value){
+    var raw=String(value);
+    if(el.dataset.role==='assistant')formatAssistant(el,raw);
+    else el.textContent=raw;
+  }
   function bubble(role,text){
     var el=document.createElement('div');
-    el.className='vy-bubble';el.dataset.role=role;el.textContent=text;
+    el.className='vy-bubble';el.dataset.role=role;setBubbleText(el,text);
     messages.appendChild(el);messages.scrollTop=messages.scrollHeight;
     return el;
   }
@@ -159,12 +244,12 @@ button,input{font:inherit}button{cursor:pointer}
       var current=await token();if(authWasPresent&&!current&&!localEndpoint){history=[];conversationId=null;messages.replaceChildren();bubble('assistant','Please sign in again to continue your private conversation.');return;}
       var response=await request({action:'message',message:q,conversation_id:conversationId,
         context:context(),ephemeral_history:(current||localEndpoint&&authWasPresent)?[]:history.slice(-12)});
-      pending.textContent=String(response.data.reply||'No response');
+      setBubbleText(pending,String(response.data.reply||'No response'));
       conversationId=response.data.conversation_id||conversationId;
       authWasPresent=authWasPresent||response.authenticated;
-      if(!response.authenticated){history.push({role:'user',content:q},{role:'assistant',content:pending.textContent});history=history.slice(-12);}
+      if(!response.authenticated){history.push({role:'user',content:q},{role:'assistant',content:pending.dataset.rawContent||pending.textContent});history=history.slice(-12);}
       if(response.authenticated)feedback(response.data.interaction_id);
-    }catch(err){pending.textContent=err instanceof Error?err.message:'Could not contact Vyasa.';}
+    }catch(err){setBubbleText(pending,err instanceof Error?err.message:'Could not contact Vyasa.');}
     finally{busy=false;send.disabled=false;input.disabled=false;input.focus();messages.scrollTop=messages.scrollHeight;}
   });
 })();
