@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { getPdfjs } from '@/lib/pdfjs';
 import { MadeInIndia } from './IndiaBadge';
+import { PrabhasSaasLockup } from './PrabhasSaasLogo';
 
 const MIN_VISIBLE_MS = 1100; // don't flash even if everything loads instantly
 const MAX_VISIBLE_MS = 6000; // safety net if something hangs
@@ -86,24 +87,20 @@ export default function SplashScreen() {
       aria-hidden="true"
     >
       <div
-        className="mx-6 flex w-full max-w-[480px] flex-col items-center justify-center gap-4 rounded-2xl border border-slate-200 bg-white px-8 shadow-2xl dark:border-slate-800 dark:bg-slate-900"
+        className="mx-6 flex w-full max-w-[480px] flex-col items-center justify-center gap-4 rounded-2xl border border-slate-200 bg-white px-8 shadow-2xl dark:border-slate-700"
         style={{ aspectRatio: '2 / 1' }}
       >
         <div className="flex flex-col items-center gap-1">
-          <span className="text-[10px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">
+          <span className="text-[10px] font-medium tracking-wide text-slate-400 uppercase">
             Powered by
           </span>
-          <img
-            src="/brand/prabhas-saas-logo.svg"
-            alt="Prabhas SaaS"
-            className="h-24 w-auto object-contain"
-          />
+          <PrabhasSaasLockup className="h-24" />
         </div>
 
-        <MadeInIndia className="text-xs font-medium text-slate-500 dark:text-slate-400" />
+        <MadeInIndia className="text-xs font-medium text-slate-500" />
 
         <div className="mt-1 w-full max-w-[220px]">
-          <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
             <div
               className="h-full rounded-full bg-emerald-500 transition-[width] duration-150 ease-out"
               style={{ width: `${progress}%` }}
