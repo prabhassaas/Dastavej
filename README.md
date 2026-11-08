@@ -98,3 +98,7 @@ workers/              compress.worker.ts (pdf-lib + OffscreenCanvas)
 - The compressor only rewrites plain baseline JPEGs in safe color spaces; exotic images (indexed palettes, decode arrays, CMYK) are left untouched rather than risk corruption.
 - Edit overlays assume unrotated page content for pixel-perfect alignment; rotated pages can still be viewed, organized and exported normally.
 - Encrypted/password-protected PDFs are not supported.
+
+## Bharatiya date
+
+The header clock and the print stamp show the Panchang date (paksha + tithi, Shaka, Vikram Samvat; Purnima/Amavasya flagged) beside the Gregorian date. `lib/bharatiya.ts` is a verbatim copy of PrabhasSaaS-Website `shared/bharatiya.ts` (generated there; re-copy, never edit); `lib/__fixtures__/bharatiya-golden.json` is the shared golden file (this repo has no test runner yet, so run it from the website repo). A downloaded or exported PDF is the user's own file and is never stamped. Rules: PrabhasSaaS-Website `docs/BHARATIYA-DATE.md`.

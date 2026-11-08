@@ -5,6 +5,7 @@ import { usePdfStore } from '@/lib/store';
 import { assemblePdf } from '@/lib/export';
 import { downloadBytes } from '@/lib/download';
 import { printPdf } from '@/lib/print';
+import { PSSBharatiya } from '@/lib/bharatiya';
 import {
   IconClock,
   IconDownload,
@@ -25,6 +26,7 @@ function DateClock() {
     return () => clearInterval(t);
   }, []);
   if (!now) return null;
+  const bh = PSSBharatiya.lines(PSSBharatiya.forDate(new Date(now.getTime() + (330 + now.getTimezoneOffset()) * 60000)), { lang: 'en' });
   return (
     <div
       className="hidden items-center gap-2 rounded-lg border border-slate-200 px-3 py-1.5 lg:flex dark:border-slate-700"
@@ -42,6 +44,15 @@ function DateClock() {
         </p>
         <p className="font-mono text-xs tabular-nums">{now.toLocaleTimeString()}</p>
       </div>
+      {bh && (
+        <div className="border-l border-slate-200 pl-2 text-right leading-tight dark:border-slate-700" title={`${bh.l1} · ${bh.l2}`}>
+          <p className="text-[11px] font-medium text-slate-600 dark:text-slate-300">
+            {bh.moon && <i className={`mr-1 inline-block h-2 w-2 rounded-full align-[-1px] ${bh.moon === 'full' ? 'bg-amber-300' : 'bg-slate-900 ring-1 ring-slate-500'}`} />}
+            {bh.l1}
+          </p>
+          <p className="text-[10px] text-slate-500 dark:text-slate-400">{bh.l2}</p>
+        </div>
+      )}
     </div>
   );
 }

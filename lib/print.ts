@@ -1,5 +1,6 @@
 import { StandardFonts, rgb } from '@cantoo/pdf-lib';
 import { loadPdf } from './pdfLoad';
+import { PSSBharatiya } from './bharatiya';
 
 /**
  * Print the given PDF via the browser's print dialog. Each page is stamped
@@ -20,8 +21,15 @@ export async function printPdf(bytes: Uint8Array, stampDateTime = true): Promise
       month: 'short',
       day: '2-digit',
     })} ${now.toLocaleTimeString()}`;
+    // Panchang date under the print stamp (rules: PrabhasSaaS-Website docs/BHARATIYA-DATE.md). Plain ASCII: base-14 Helvetica has no middle dot.
+    const bh = PSSBharatiya.lines(PSSBharatiya.forDate(new Date(now.getTime() + (330 + now.getTimezoneOffset()) * 60000)), { lang: 'en' });
+    const bhStamp = bh ? `${bh.l1} - ${bh.l2.split(' · ').join(' - ')}` : '';
     for (const page of doc.getPages()) {
       const { width, height } = page.getSize();
+      if (bhStamp) {
+        const bw = font.widthOfTextAtSize(bhStamp, 6.5);
+        page.drawText(bhStamp, { x: width - bw - 24, y: height - 27, size: 6.5, font, color: rgb(0.42, 0.45, 0.5) });
+      }
       const w = font.widthOfTextAtSize(stamp, 8);
       page.drawText(stamp, {
         x: width - w - 24,
